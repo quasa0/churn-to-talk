@@ -14,6 +14,7 @@ export type DetectedUser = {
 export type RunHistoryItem = {
   key: string;
   run_id?: string;
+  request_id?: string;
   ran_at?: string;
   users_found?: number;
   status?: string;

@@ -61,7 +61,14 @@ Common user friction:
   unresolved blocker.
 """.strip()
 
-SECRETS = ["OPENAI_API_KEY", "NIA_API_KEY", "TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN"]
+SECRETS = [
+    "OPENAI_API_KEY",
+    "NIA_API_KEY",
+    "TURSO_DATABASE_URL",
+    "TURSO_AUTH_TOKEN",
+    "LOOPS_API_KEY",
+    "LOOPS_TRANSACTIONAL_ID",
+]
 
 SPONSOR_DOMAINS = [
     "nozomio.com",
@@ -75,6 +82,56 @@ SPONSOR_DOMAINS = [
     "aside.com",
     "cognition.ai",
     "openai.com",
+]
+
+FIRST_NAMES = [
+    "Aaliyah", "Aaron", "Abigail", "Adam", "Adrian", "Aiden", "Alex", "Alexa", "Alexis", "Alice",
+    "Amara", "Amanda", "Amelia", "Andre", "Andrew", "Angel", "Angela", "Anika", "Anna", "Anthony",
+    "Ari", "Aria", "Arthur", "Ashley", "Ashton", "Aubrey", "Austin", "Ava", "Avery", "Bailey",
+    "Beatrice", "Ben", "Bianca", "Blake", "Brandon", "Brianna", "Brooke", "Caleb", "Camila", "Cameron",
+    "Carla", "Carlos", "Carmen", "Caroline", "Casey", "Celeste", "Charlie", "Charlotte", "Chloe", "Chris",
+    "Christian", "Christopher", "Claire", "Clara", "Cody", "Cole", "Colin", "Connor", "Courtney", "Daisy",
+    "Daniel", "Daniela", "Dante", "David", "Dean", "Delaney", "Derek", "Destiny", "Devin", "Diana",
+    "Diego", "Dylan", "Eden", "Edgar", "Elena", "Eli", "Eliana", "Elijah", "Ella", "Elliot",
+    "Emily", "Emma", "Eric", "Erica", "Ethan", "Eva", "Evan", "Evelyn", "Faith", "Felix",
+    "Finn", "Fiona", "Frances", "Gabriel", "Gabriela", "Gavin", "Gia", "Giselle", "Grace", "Grant",
+    "Hailey", "Hannah", "Harper", "Hayden", "Henry", "Hudson", "Ian", "Iris", "Isaac", "Isabel",
+    "Isabella", "Isaiah", "Jack", "Jackson", "Jacob", "Jade", "Jalen", "James", "Jasmine", "Jason",
+    "Jayden", "Jenna", "Jeremy", "Jessica", "Joanna", "Joel", "John", "Jordan", "Joseph", "Julia",
+    "Julian", "Kai", "Kara", "Karen", "Katherine", "Kayla", "Keira", "Kelsey", "Kevin", "Kiara",
+    "Kimberly", "Kyle", "Laila", "Landon", "Laura", "Lauren", "Leah", "Leo", "Leon", "Liam",
+    "Lila", "Lily", "Logan", "Lucas", "Lucia", "Luis", "Luna", "Mackenzie", "Maddox", "Madeline",
+    "Madison", "Maya", "Mia", "Micah", "Michael", "Mila", "Miles", "Molly", "Morgan", "Naomi",
+    "Natalie", "Nathan", "Nia", "Nicholas", "Nico", "Noah", "Nolan", "Nora", "Olivia", "Omar",
+    "Owen", "Paige", "Parker", "Penelope", "Peter", "Piper", "Quinn", "Rachel", "Rebecca", "Reese",
+    "Riley", "River", "Roman", "Ruby", "Ryan", "Sabrina", "Sadie", "Sam", "Samantha", "Samuel",
+    "Sarah", "Savannah", "Sebastian", "Sienna", "Sofia", "Sophie", "Spencer", "Stella", "Sydney", "Taylor",
+    "Theo", "Thomas", "Tori", "Tristan", "Tyler", "Valeria", "Vanessa", "Victoria", "Violet", "Willow",
+    "Wyatt", "Xavier", "Yara", "Zachary", "Zoe", "Adriana", "Alana", "Alina", "Anya", "April",
+]
+
+LAST_NAMES = [
+    "Adams", "Ahmed", "Alexander", "Allen", "Alvarez", "Anderson", "Archer", "Armstrong", "Arnold", "Atkins",
+    "Austin", "Bailey", "Baker", "Barnes", "Bennett", "Bishop", "Black", "Blair", "Boone", "Bowen",
+    "Boyd", "Bradley", "Brooks", "Brown", "Bryant", "Burke", "Burns", "Butler", "Caldwell", "Campbell",
+    "Cannon", "Carpenter", "Carr", "Carter", "Castillo", "Chen", "Clark", "Cole", "Coleman", "Collins",
+    "Cook", "Cooper", "Cox", "Cruz", "Daniels", "Davis", "Dawson", "Diaz", "Dixon", "Douglas",
+    "Duncan", "Edwards", "Ellis", "Evans", "Ferguson", "Fisher", "Flores", "Ford", "Foster", "Fox",
+    "Franklin", "Freeman", "Garcia", "Gardner", "George", "Gibson", "Gomez", "Gonzalez", "Gordon", "Graham",
+    "Grant", "Gray", "Green", "Griffin", "Gupta", "Gutierrez", "Hamilton", "Hansen", "Harper", "Harris",
+    "Hart", "Harvey", "Hayes", "Henderson", "Hernandez", "Herrera", "Hill", "Holland", "Holmes", "Howard",
+    "Hughes", "Hunter", "Jackson", "James", "Jenkins", "Johnson", "Jones", "Jordan", "Keller", "Kelly",
+    "Kennedy", "Kim", "King", "Knight", "Kumar", "Lambert", "Lane", "Larson", "Lawson", "Lee",
+    "Lewis", "Li", "Lloyd", "Long", "Lopez", "Luna", "Mack", "Marshall", "Martin", "Martinez",
+    "Mason", "Matthews", "May", "Mendoza", "Meyer", "Miles", "Miller", "Mitchell", "Morales", "Morgan",
+    "Morris", "Murphy", "Murray", "Myers", "Nguyen", "Nichols", "Nolan", "Ortiz", "Owens", "Palmer",
+    "Park", "Parker", "Patel", "Patterson", "Payne", "Perez", "Perry", "Peterson", "Phillips", "Porter",
+    "Powell", "Price", "Ramirez", "Reed", "Reeves", "Reid", "Reyes", "Reynolds", "Rhodes", "Rice",
+    "Richardson", "Rivera", "Roberts", "Robertson", "Robinson", "Rodriguez", "Rogers", "Ross", "Russell", "Sanchez",
+    "Sanders", "Scott", "Shah", "Shaw", "Simmons", "Singh", "Smith", "Soto", "Spencer", "Stewart",
+    "Stone", "Sullivan", "Taylor", "Thomas", "Thompson", "Torres", "Tran", "Turner", "Vargas", "Vasquez",
+    "Wagner", "Walker", "Wallace", "Walsh", "Ward", "Watson", "Weaver", "Webb", "Wells", "West",
+    "White", "Williams", "Wilson", "Wong", "Wood", "Wright", "Yang", "Young", "Zimmerman", "Arias",
 ]
 
 if Image:
@@ -113,6 +170,93 @@ def _json_request(
         if not body:
             return {}
         return json.loads(body)
+
+
+def _display_timeline(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return text
+    if isinstance(parsed, dict) and isinstance(parsed.get("events"), str):
+        return parsed["events"]
+    return text
+
+
+def _first_name(name: Any) -> str:
+    value = str(name or "there").strip()
+    return value.split()[0] if value else "there"
+
+
+def _email_local_part(name: str) -> str:
+    local = ".".join(name.lower().split())
+    return "".join(char if char.isalnum() or char == "." else "" for char in local).strip(".")
+
+
+def _sample_identities(count: int) -> list[dict[str, str]]:
+    identities: list[dict[str, str]] = []
+    seen: set[str] = set()
+    while len(identities) < count:
+        name = f"{random.choice(FIRST_NAMES)} {random.choice(LAST_NAMES)}"
+        if name in seen:
+            continue
+        seen.add(name)
+        domain = random.choice(SPONSOR_DOMAINS)
+        identities.append({"name": name, "email": f"{_email_local_part(name)}@{domain}"})
+    return identities
+
+
+def _notification_subject(user: dict[str, Any]) -> str:
+    first_name = _first_name(user.get("name"))
+    reason = str(user.get("detection_reason") or "").lower()
+    timeline = _display_timeline(user.get("event_timeline")).lower()
+    combined = f"{reason} {timeline}"
+
+    subject_rules = [
+        (("import", "fail"), f"{first_name}'s import failed twice"),
+        (("upload", "stuck"), f"{first_name} got stuck uploading"),
+        (("processing", "slow"), f"{first_name} waited too long for processing"),
+        (("transcript", "bad"), f"{first_name} got a messy transcript"),
+        (("transcript", "edit"), f"{first_name} stalled fixing the transcript"),
+        (("generate", "zero"), f"{first_name} generated zero usable clips"),
+        (("clip", "quality"), f"{first_name} did not trust the clip quality"),
+        (("hook", "edit"), f"{first_name} kept rewriting hooks"),
+        (("caption", "style"), f"{first_name} could not settle on captions"),
+        (("caption", "edit"), f"{first_name} got stuck editing captions"),
+        (("aspect", "ratio"), f"{first_name} bounced on aspect ratios"),
+        (("timeline_drag",), f"{first_name} fought the trim handles"),
+        (("editor", "confusing"), f"{first_name} found the editor confusing"),
+        (("export", "failed"), f"{first_name}'s export failed"),
+        (("export", "never"), f"{first_name} never exported a clip"),
+        (("download", "never"), f"{first_name} never downloaded their clips"),
+        (("watermark",), f"{first_name} hit watermark friction"),
+        (("free limit",), f"{first_name} hit the free limit"),
+        (("pricing",), f"{first_name} hit pricing friction"),
+        (("billing",), f"{first_name} checked billing and bounced"),
+        (("youtube", "connect"), f"{first_name} connected YouTube then stalled"),
+        (("batch",), f"{first_name} batch-generated clips but left"),
+        (("team", "invite"), f"{first_name} invited a teammate then vanished"),
+        (("template",), f"{first_name} got stuck choosing a template"),
+        (("brand", "kit"), f"{first_name} stalled on brand setup"),
+        (("thumbnail",), f"{first_name} abandoned thumbnail tweaks"),
+        (("preview", "bounce"), f"{first_name} bounced after previewing"),
+        (("return", "bounce"), f"{first_name} came back and bounced again"),
+        (("dormant",), f"{first_name} went dormant after setup"),
+        (("mobile",), f"{first_name} struggled on mobile"),
+        (("large", "file"), f"{first_name} hit a large-file wall"),
+        (("podcast", "rss"), f"{first_name} could not finish podcast import"),
+    ]
+    for keywords, subject in subject_rules:
+        if all(keyword in combined for keyword in keywords):
+            return subject
+
+    if "export" in combined:
+        return f"{first_name} never exported a clip"
+    if "editor" in combined or "trim" in combined:
+        return f"{first_name} got stuck in the editor"
+    return f"{first_name} needs a recovery note"
 
 
 def _turso_request(statements: list[dict[str, Any]]) -> dict[str, Any]:
@@ -282,6 +426,7 @@ def _openai_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
 
 def generate_mock_users(app_context: str) -> list[dict[str, Any]]:
     count = random.randint(1, 3)
+    identities = _sample_identities(count)
     schema = {
         "type": "object",
         "additionalProperties": False,
@@ -353,6 +498,9 @@ Generate {count} realistic fake churned fastclip.it users.
 App context from Nia:
 {app_context}
 
+Use these exact made-up identities in order, one per generated user. Do not invent different names or emails:
+{json.dumps(identities, indent=2)}
+
 Each user must be made up, B2C creator/prosumer, and include a specific sequence of app actions over multiple visits.
 Each email must use one of these hackathon sponsor domains exactly: {", ".join(SPONSOR_DOMAINS)}.
 Use realistic personal-looking work emails, for example first.last@vercel.com or first@tensorlake.ai. Do not use example.com, gmail.com, yahoo.com, outlook.com, or fastclip.it.
@@ -361,7 +509,37 @@ Make the behavioral data feel like a real product analytics trace, not a generic
 - event_timeline must be a compact action-token string like:
   "signup • upload(Brave Convos #14, 47m) • generate_clips(8) • preview_clip • open_editor • timeline_drag(x6) • caption_edit(x4) • bounce • return(d3) • open_editor • export_failed • bounce • return(d5) • view_pricing • bounce"
 - Include concrete media/project details: podcast episode titles, webinar titles, creator niches, source length, batch counts, file sizes, or connected channels.
-- Good churn patterns: generated clips but exported zero, dragged trim handles repeatedly, changed caption style/aspect ratio then left, import failed silently twice, viewed billing after hitting free limit, connected YouTube and batch-generated many clips but never downloaded.
+- Use a wide range of churn patterns. Pick creative, specific reasons from this list and do not repeat the same reason style within one run:
+  1. generated useful clips but exported zero
+  2. dragged trim handles repeatedly and left
+  3. changed caption styles too many times
+  4. aspect ratio switching looked wrong for TikTok vs Shorts
+  5. upload got stuck on a large 2GB+ file
+  6. import failed silently twice
+  7. YouTube channel connected but batch generation was abandoned
+  8. podcast RSS import started then no episode was selected
+  9. transcript quality looked messy and they stopped
+  10. spent time editing transcript words but never regenerated clips
+  11. AI clips were generated but all looked low-confidence
+  12. kept rewriting the first hook and never previewed final
+  13. previewed clips but bounced before download
+  14. export failed once and they never retried
+  15. downloaded one preview but never removed watermark
+  16. hit free limit and viewed pricing
+  17. opened billing twice but never upgraded
+  18. invited a teammate, then neither user returned
+  19. got stuck choosing a caption template
+  20. abandoned brand kit/logo setup
+  21. thumbnail/title editing took several attempts
+  22. selected LinkedIn format but never exported
+  23. mobile session showed repeated editor opens and bounces
+  24. uploaded multiple assets but never chose one to process
+  25. returned after a week, opened the same project, bounced again
+  26. tried batch export and hit an error
+  27. switched language/captions and stopped
+  28. opened help/docs/search and then went dormant
+  29. copied share link but never downloaded final video
+  30. saw processing complete email but did not return for export
 - Detection reasons should be short behavioral phrases, e.g. "returned twice after generating 8 clips but never exported" or "2.3GB import failed twice, then 12 days dormant".
 
 Generate engagement metrics for the visual timeline:
@@ -374,6 +552,10 @@ Generate engagement metrics for the visual timeline:
 - days: only active-day dots, not every day. Each item day is zero-based from signup, must be less than onboardedDaysAgo - dormantDays, and labels should be short: signup, upload, import, batch, editor, captions, billing, fail, stuck, retry.
 """
     users = _openai_structured(prompt, schema)["users"]
+    for index, user in enumerate(users):
+        if index < len(identities):
+            user["name"] = identities[index]["name"]
+            user["email"] = identities[index]["email"]
     normalized = [normalize_sponsor_email(user, index) for index, user in enumerate(users)]
     return [pack_event_timeline(user) for user in normalized]
 
@@ -445,8 +627,7 @@ def normalize_sponsor_email(user: dict[str, Any], index: int) -> dict[str, Any]:
         return user
 
     name = str(user.get("name") or f"user {index + 1}").strip().lower()
-    local = "".join(char if char.isalnum() else "." for char in name)
-    local = ".".join(part for part in local.split(".") if part) or f"user{index + 1}"
+    local = _email_local_part(name) or f"user{index + 1}"
     user["email"] = f"{local}@{SPONSOR_DOMAINS[index % len(SPONSOR_DOMAINS)]}"
     return user
 
@@ -497,6 +678,73 @@ For each user, return:
     return enriched
 
 
+def send_loops_notifications(users: list[dict[str, Any]]) -> dict[str, Any]:
+    api_key = os.environ.get("LOOPS_API_KEY")
+    transactional_id = os.environ.get("LOOPS_TRANSACTIONAL_ID") or os.environ.get("LOOPS_RECOVERY_TEMPLATE_ID")
+    recipient = os.environ.get("LOOPS_NOTIFY_EMAIL", "anatolii@fastclip.it")
+    app_url = os.environ.get("APP_BASE_URL", "https://churn-to-talk.vercel.app").rstrip("/")
+
+    if not api_key or not transactional_id:
+        return {"enabled": False, "sent": 0, "failed": 0}
+
+    sent = 0
+    failures: list[dict[str, str]] = []
+    for user in users:
+        user_id = str(user.get("id") or "")
+        send_url = f"{app_url}/?sendTo={urllib.parse.quote(user_id)}"
+        first_name = _first_name(user.get("name"))
+        subject = _notification_subject(user)
+        body = "\n\n".join(
+            [
+                f"why detected\n{user.get('detection_reason') or ''}",
+                f"activity summary\n{user.get('activity_summary') or ''}",
+                f"raw event timeline\n{_display_timeline(user.get('event_timeline'))}",
+                f"i drafted this email to send them:\n{user.get('draft_message') or ''}",
+                f"SEND?\n{send_url}",
+            ]
+        )
+        payload = {
+            "email": recipient,
+            "transactionalId": transactional_id,
+            "addToAudience": True,
+            "dataVariables": {
+                "topic": subject,
+                "body": body,
+                "subject": subject,
+                "firstName": first_name,
+                "detectedUserName": str(user.get("name") or ""),
+                "detectedUserEmail": str(user.get("email") or ""),
+                "whyDetected": str(user.get("detection_reason") or ""),
+                "activitySummary": str(user.get("activity_summary") or ""),
+                "rawEventTimeline": _display_timeline(user.get("event_timeline")),
+                "draftMessage": str(user.get("draft_message") or ""),
+                "sendUrl": send_url,
+            },
+        }
+        try:
+            _json_request(
+                "https://app.loops.so/api/v1/transactional",
+                payload,
+                {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "Idempotency-Key": f"churn-to-talk:{user_id}",
+                    "User-Agent": "churn-to-talk/1.0",
+                },
+                timeout=30,
+            )
+            sent += 1
+        except Exception as exc:
+            failures.append({"user_id": user_id, "error": str(exc)[:240]})
+
+    return {
+        "enabled": True,
+        "sent": sent,
+        "failed": len(failures),
+        "failures": failures[:3],
+    }
+
+
 def save_to_db(run_id: str, users: list[dict[str, Any]], app_context: str, source: str) -> dict[str, Any]:
     ran_at = _now_iso()
     statements = [
@@ -510,6 +758,7 @@ def save_to_db(run_id: str, users: list[dict[str, Any]], app_context: str, sourc
         )
     ]
     for user in users:
+        user["id"] = user.get("id") or f"du_{uuid.uuid4().hex}"
         statements.append(
             _stmt(
                 """
@@ -520,7 +769,7 @@ def save_to_db(run_id: str, users: list[dict[str, Any]], app_context: str, sourc
                 VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), ?)
                 """,
                 [
-                    f"du_{uuid.uuid4().hex}",
+                    user.get("id"),
                     user.get("email"),
                     user.get("name"),
                     user.get("detection_reason"),
@@ -550,6 +799,7 @@ def save_to_db(run_id: str, users: list[dict[str, Any]], app_context: str, sourc
         )
     )
     _turso_request(statements)
+    metadata["loops"] = send_loops_notifications(users)
     return metadata
 
 

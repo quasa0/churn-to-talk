@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
   ArrowRight,
   Check,
@@ -33,6 +34,10 @@ export function ReviewBoard({ initialUsers, initialRuns }: Props) {
   const [topBusy, setTopBusy] = useState<"refresh" | "trigger" | null>(null);
   const [rowBusy, setRowBusy] = useState<Record<string, "save" | "send">>({});
   const [filter, setFilter] = useState<FilterId>("pending");
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [highlightedUserId, setHighlightedUserId] = useState<string | null>(null);
+  const [autoSendAttempted, setAutoSendAttempted] = useState(false);
+  const pollingRuns = useRef<Set<string>>(new Set());
 
   const pendingCount = useMemo(
     () => users.filter((u) => u.status === "pending").length,
@@ -43,13 +48,17 @@ export function ReviewBoard({ initialUsers, initialRuns }: Props) {
     [users]
   );
   const visible = useMemo(() => {
-    if (filter === "all") return users;
-    return users.filter((u) => u.status === filter);
-  }, [users, filter]);
+    const filtered =
+      filter === "all" ? users : users.filter((u) => u.status === filter);
+    if (!selectedUserId) return filtered;
+    const selected = filtered.find((u) => u.id === selectedUserId);
+    if (!selected) return filtered;
+    return [selected, ...filtered.filter((u) => u.id !== selectedUserId)];
+  }, [users, filter, selectedUserId]);
 
   const lastRun = runs[0];
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     const [u, r] = await Promise.all([
       fetch("/api/detected-users", { cache: "no-store" }),
       fetch("/api/runs", { cache: "no-store" }),
@@ -63,7 +72,7 @@ export function ReviewBoard({ initialUsers, initialRuns }: Props) {
         usersPayload.users.map((x) => [x.id, x.draft_message ?? ""])
       )
     );
-  }
+  }, []);
 
   async function refresh() {
     setTopBusy("refresh");
@@ -74,18 +83,91 @@ export function ReviewBoard({ initialUsers, initialRuns }: Props) {
     }
   }
 
+  function changeFilter(nextFilter: FilterId) {
+    setFilter(nextFilter);
+    setSelectedUserId(null);
+    setHighlightedUserId(null);
+    setAutoSendAttempted(false);
+    if (window.location.search.includes("sendTo=")) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }
+
   async function triggerAgent() {
     setTopBusy("trigger");
     try {
-      await fetch("/api/run-agent", { method: "POST" });
-      for (let i = 0; i < 4; i++) {
-        await new Promise((res) => setTimeout(res, 3500));
-        await loadData();
+      const response = await fetch("/api/run-agent", { method: "POST" });
+      const payload = (await response.json()) as {
+        tensorlake?: { request_id?: string };
+        pendingRun?: RunHistoryItem | null;
+      };
+      const requestId = payload.tensorlake?.request_id;
+      const pendingRun = payload.pendingRun;
+
+      if (pendingRun) {
+        setRuns((current) => [
+          pendingRun,
+          ...current.filter((run) => run.key !== pendingRun.key),
+        ]);
       }
+
+      if (!requestId) {
+        await loadData();
+        return;
+      }
+
+      for (let i = 0; i < 40; i++) {
+        await new Promise((res) => setTimeout(res, 2500));
+        const statusResponse = await fetch(`/api/run-agent/${requestId}`, {
+          cache: "no-store",
+        });
+        const statusPayload = (await statusResponse.json()) as {
+          complete?: boolean;
+          output?: {
+            run_id?: string;
+            ran_at?: string;
+            users_found?: number;
+            status?: string;
+            source?: string;
+          };
+        };
+
+        if (statusPayload.complete) {
+          setRuns((current) => [
+            ...current.filter((run) => run.key !== pendingRun?.key),
+          ]);
+          await loadData();
+          return;
+        }
+      }
+
+      await loadData();
     } finally {
       setTopBusy(null);
     }
   }
+
+  const pollRun = useCallback(async (requestId: string) => {
+    if (pollingRuns.current.has(requestId)) return;
+    pollingRuns.current.add(requestId);
+    for (let i = 0; i < 40; i++) {
+      await new Promise((res) => setTimeout(res, 2500));
+      const statusResponse = await fetch(`/api/run-agent/${requestId}`, {
+        cache: "no-store",
+      });
+      if (!statusResponse.ok) {
+        pollingRuns.current.delete(requestId);
+        return;
+      }
+      const statusPayload = (await statusResponse.json()) as { complete?: boolean };
+      if (statusPayload.complete) {
+        pollingRuns.current.delete(requestId);
+        await loadData();
+        return;
+      }
+    }
+    pollingRuns.current.delete(requestId);
+  }, [loadData]);
 
   async function saveDraft(userId: string) {
     setRowBusy((current) => ({ ...current, [userId]: "save" }));
@@ -125,6 +207,47 @@ export function ReviewBoard({ initialUsers, initialRuns }: Props) {
     }
   }
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sendTo = params.get("sendTo");
+    if (!sendTo) return;
+
+    setSelectedUserId(sendTo);
+    setHighlightedUserId(sendTo);
+    setFilter("all");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    const clear = window.setTimeout(() => {
+      setHighlightedUserId((current) => (current === sendTo ? null : current));
+    }, 10000);
+
+    return () => window.clearTimeout(clear);
+  }, []);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    for (const run of runs) {
+      if (run.status === "running" && run.request_id) {
+        void pollRun(run.request_id);
+      }
+    }
+  }, [pollRun, runs]);
+
+  useEffect(() => {
+    if (!selectedUserId || autoSendAttempted) return;
+    const selected = users.find((u) => u.id === selectedUserId);
+    if (!selected) return;
+    setAutoSendAttempted(true);
+    if (selected.status !== "sent") {
+      window.setTimeout(() => {
+        void send(selectedUserId);
+      }, 500);
+    }
+  }, [selectedUserId, autoSendAttempted, users]);
+
   return (
     <div className="min-h-screen bg-paper text-ink">
       {/* Top bar */}
@@ -134,7 +257,7 @@ export function ReviewBoard({ initialUsers, initialRuns }: Props) {
             <Logo />
             <div className="flex flex-wrap items-center gap-2.5">
               <span className="text-[14px] font-semibold tracking-tight sm:text-[15px]">
-                Churn -&gt; to -&gt; Talk | Command Center
+                Churn → to → Talk | Command Center
               </span>
               <span className="hidden h-4 w-px bg-line sm:block" />
               <span className="rounded-md border border-line bg-white px-2 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-mute">
@@ -193,9 +316,9 @@ export function ReviewBoard({ initialUsers, initialRuns }: Props) {
               for your voice.
             </h1>
             <p className="mt-3 max-w-xl text-[14.5px] leading-[1.6] text-mute">
-              The agent generates founder-voice recovery emails for users who
-              hit friction and disappeared. Read the trail, edit a line, send
-              it yourself.
+              Tensorlake watches for churn signals, reconstructs what each user
+              tried, and drafts the short founder note you would have written
+              yourself.
             </p>
           </div>
           <div className="col-span-12 lg:col-span-4">
@@ -222,7 +345,7 @@ export function ReviewBoard({ initialUsers, initialRuns }: Props) {
               </div>
               <FilterTabs
                 value={filter}
-                onChange={setFilter}
+                onChange={changeFilter}
                 counts={{
                   pending: pendingCount,
                   sent: sentCount,
@@ -246,6 +369,7 @@ export function ReviewBoard({ initialUsers, initialRuns }: Props) {
                     onSave={() => saveDraft(user.id)}
                     onSend={() => send(user.id)}
                     busy={rowBusy[user.id] ?? null}
+                    highlighted={highlightedUserId === user.id}
                   />
                 ))
               )}
@@ -305,10 +429,9 @@ function Cadence({
   sentCount: number;
 }) {
   return (
-    <div className="grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-line bg-line">
+    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line">
       <CadenceCell label="pending" value={pendingCount} accent="amber" />
       <CadenceCell label="sent today" value={sentCount} accent="moss" />
-      <CadenceCell label="every" value="15m" mono />
     </div>
   );
 }
@@ -396,6 +519,14 @@ function FilterTabs({
 // ───────────────────────────── Run history sidebar
 
 function RunHistory({ runs }: { runs: RunHistoryItem[] }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!runs.some((run) => run.status === "running")) return;
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [runs]);
+
   return (
     <div className="lg:sticky lg:top-[68px]">
       <div className="border-b border-line pb-3">
@@ -406,7 +537,7 @@ function RunHistory({ runs }: { runs: RunHistoryItem[] }) {
           </span>
         </div>
         <p className="mt-1 font-mono text-[11px] text-mute">
-          Tensorlake CRON · every 15 minutes
+          Tensorlake CRON · every 3 minutes
         </p>
       </div>
 
@@ -456,7 +587,14 @@ function RunHistory({ runs }: { runs: RunHistoryItem[] }) {
                     </span>
                   </div>
                   <div className="mt-0.5 text-[12.5px] text-mute">
-                    {(r.users_found ?? 0) > 0 ? (
+                    {r.status === "running" ? (
+                      <span className="inline-flex items-center gap-1.5 text-amber">
+                        <Loader2 size={11} className="animate-spin" />
+                        running {fmtElapsed(r.ran_at, now)}
+                      </span>
+                    ) : r.status === "failed" ? (
+                      <span className="text-amber">failed</span>
+                    ) : (r.users_found ?? 0) > 0 ? (
                       <span>
                         <span className="font-semibold text-ink tabular-nums">
                           {r.users_found}
@@ -467,6 +605,17 @@ function RunHistory({ runs }: { runs: RunHistoryItem[] }) {
                       <span className="text-mute2">no signal</span>
                     )}
                   </div>
+                  {r.request_id ? (
+                    <a
+                      href={tensorlakeRequestUrl(r.request_id)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1.5 inline-flex items-center gap-1.5 rounded border border-line bg-white px-1.5 py-0.5 font-mono text-[9.5px] text-mute transition-colors hover:border-moss hover:text-moss"
+                    >
+                      <TensorlakeMark />
+                      See in Tensorlake -&gt;
+                    </a>
+                  ) : null}
                 </div>
               </li>
             );
@@ -542,6 +691,8 @@ function UserRow({
   onSave,
   onSend,
   busy,
+  highlighted,
+  showDetailsLink = true,
 }: {
   user: DetectedUser;
   draft: string;
@@ -549,13 +700,21 @@ function UserRow({
   onSave: () => void;
   onSend: () => void;
   busy: string | null;
+  highlighted: boolean;
+  showDetailsLink?: boolean;
 }) {
   const dirty = draft !== (user.draft_message ?? "");
   const sent = user.status === "sent";
   const profile = useMemo(() => deriveEngagement(user), [user]);
 
   return (
-    <article className="overflow-hidden rounded-xl border border-line bg-white">
+    <article
+      className={clsx(
+        "overflow-hidden rounded-xl border border-line bg-white transition-[box-shadow,background-color,border-color] duration-500",
+        highlighted &&
+          "border-amber bg-[#FFFBF1] shadow-[0_0_0_6px_rgba(176,122,44,0.14),0_18px_60px_rgba(176,122,44,0.22)]"
+      )}
+    >
       <header className="flex flex-wrap items-start justify-between gap-6 border-b border-line px-6 pt-5 pb-4">
         <div className="flex min-w-0 items-start gap-4">
           <Avatar name={user.name ?? "?"} />
@@ -599,6 +758,26 @@ function UserRow({
               </pre>
             </details>
           ) : null}
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <a
+              href="https://posthog.com"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-8 items-center gap-2 rounded-md border border-line bg-white px-3 text-[12px] font-medium text-ink transition-colors hover:bg-paper2"
+            >
+              <PostHogMark />
+              See activity in PostHog →
+            </a>
+            {showDetailsLink ? (
+              <Link
+                href={`/users/${encodeURIComponent(user.id)}`}
+                className="inline-flex h-8 items-center gap-2 rounded-md border border-line bg-white px-3 text-[12px] font-medium text-ink transition-colors hover:bg-paper2"
+              >
+                View full details →
+              </Link>
+            ) : null}
+          </div>
         </div>
 
         <div className="col-span-12 border-t border-line px-6 py-5 lg:col-span-5 lg:border-t-0">
@@ -665,6 +844,49 @@ function UserRow({
   );
 }
 
+export function FocusedUserCard({ user }: { user: DetectedUser }) {
+  const [draft, setDraft] = useState(user.draft_message ?? "");
+  const [currentUser, setCurrentUser] = useState(user);
+  const [busy, setBusy] = useState<"save" | "send" | null>(null);
+
+  async function saveDraft() {
+    setBusy("save");
+    try {
+      await fetch(`/api/detected-users/${user.id}/draft`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ draft_message: draft }),
+      });
+      setCurrentUser((curr) => ({ ...curr, draft_message: draft }));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function sendDraft() {
+    setBusy("send");
+    try {
+      await fetch(`/api/detected-users/${user.id}/send`, { method: "POST" });
+      setCurrentUser((curr) => ({ ...curr, status: "sent" }));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <UserRow
+      user={currentUser}
+      draft={draft}
+      onDraftChange={setDraft}
+      onSave={saveDraft}
+      onSend={sendDraft}
+      busy={busy}
+      highlighted={false}
+      showDetailsLink={false}
+    />
+  );
+}
+
 // ───────────────────────────── Card pieces
 
 function Avatar({ name }: { name: string }) {
@@ -698,6 +920,23 @@ function StatusPill({ status }: { status: string }) {
     >
       <span className={clsx("h-1.5 w-1.5 rounded-full", cfg.dot)} />
       {cfg.label}
+    </span>
+  );
+}
+
+function PostHogMark() {
+  return (
+    <span className="relative inline-flex h-4 w-4 items-center justify-center rounded-sm bg-[#F9BD2B] text-[9px] font-bold text-ink">
+      <span className="absolute left-[3px] top-[3px] h-2 w-2 rounded-full border border-ink/80 bg-white" />
+      <span className="absolute bottom-[3px] right-[3px] h-1.5 w-1.5 rounded-full bg-ink" />
+    </span>
+  );
+}
+
+function TensorlakeMark() {
+  return (
+    <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-sm bg-moss font-mono text-[7px] font-semibold leading-none text-white">
+      tl
     </span>
   );
 }
@@ -932,22 +1171,25 @@ function ActivityChart({ profile }: { profile: EngagementProfile }) {
           })}
 
           {profile.days.map((d, i) => {
+            const nearDormantStart = Math.abs(i - dormantStart) <= 1;
             if (
               i !== 0 &&
               i !== today &&
               i !== dormantStart &&
+              !nearDormantStart &&
               i % 7 !== 0
             )
               return null;
+            if (i !== dormantStart && nearDormantStart) return null;
             const x = padX + i * colW + colW * 0.5;
             const lbl =
               i === 0
-                ? "d1"
+                ? `t-${profile.onboardedDaysAgo}d`
                 : i === today
                 ? "now"
                 : i === dormantStart
                 ? "last seen"
-                : `d${i + 1}`;
+                : `t-${today - i}d`;
             const colour =
               i === today ? "#111714" : i === dormantStart ? "#B07A2C" : "#9AA098";
             return (
@@ -1174,6 +1416,22 @@ function fmtClock(s?: string) {
     hour: "numeric",
     minute: "2-digit",
   }).format(d);
+}
+
+function fmtElapsed(s?: string, now = Date.now()) {
+  if (!s) return "0:00";
+  const started = new Date(s).valueOf();
+  if (Number.isNaN(started)) return "0:00";
+  const totalSeconds = Math.max(0, Math.floor((now - started) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function tensorlakeRequestUrl(requestId: string) {
+  return `https://cloud.tensorlake.ai/organizations/org_bcMW6MbrTm9hmnnzmQcKG/projects/project_zzkDgDhtgNBWpkNJNznmk/applications/churn_recovery_agent/requests/${encodeURIComponent(
+    requestId
+  )}?tab=logs`;
 }
 
 function relativeFromNow(s?: string | null) {

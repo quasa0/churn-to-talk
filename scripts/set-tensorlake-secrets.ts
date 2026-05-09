@@ -3,7 +3,17 @@ import { loadDotEnv } from "./env";
 
 loadDotEnv();
 
-const required = ["OPENAI_API_KEY", "NIA_API_KEY", "TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN", "SKIP_NIA"];
+const required = [
+  "OPENAI_API_KEY",
+  "NIA_API_KEY",
+  "TURSO_DATABASE_URL",
+  "TURSO_AUTH_TOKEN",
+  "SKIP_NIA",
+  "LOOPS_API_KEY",
+  "LOOPS_TRANSACTIONAL_ID",
+  "LOOPS_NOTIFY_EMAIL",
+  "APP_BASE_URL"
+];
 const missing = required.filter((key) => !process.env[key]);
 
 if (!process.env.TENSORLAKE_API_KEY) {

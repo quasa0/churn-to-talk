@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createPendingRun } from "@/app/lib/db";
 
 export async function POST() {
   const agentUrl = process.env.TENSORLAKE_AGENT_URL;
@@ -34,5 +35,11 @@ export async function POST() {
     return NextResponse.json({ error: "Tensorlake trigger failed", details: payload }, { status: 502 });
   }
 
-  return NextResponse.json({ ok: true, tensorlake: payload });
+  const requestId =
+    payload && typeof payload === "object" && "request_id" in payload
+      ? String((payload as { request_id?: unknown }).request_id ?? "")
+      : "";
+  const pendingRun = requestId ? await createPendingRun(requestId, "vercel-ui") : null;
+
+  return NextResponse.json({ ok: true, tensorlake: payload, pendingRun });
 }

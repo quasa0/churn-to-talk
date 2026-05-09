@@ -4,7 +4,7 @@ Hackathon build for a founder-reviewed churn recovery agent.
 
 The system has two pieces:
 
-- `agent/churn_recovery_agent.py`: Tensorlake Orchestrate Python app. It can be triggered manually over HTTP or scheduled every 5 minutes. Each run generates 1-3 realistic fake churned fastclip.it users, drafts founder-voice recovery emails, and writes everything to Turso.
+- `agent/churn_recovery_agent.py`: Tensorlake Orchestrate Python app. It can be triggered manually over HTTP or scheduled every 3 minutes. Each run generates 1-3 realistic fake churned fastclip.it users, drafts founder-voice recovery emails, and writes everything to Turso.
 - `src/app`: Next.js review UI. It lists detected users, lets the founder edit drafts, marks drafts as sent, shows run history, and includes a "Trigger Agent Now" button for demos.
 
 Nia is enabled with `SKIP_NIA=0`. The agent first searches Nia shared context for `fastclip.it-copy context churn recovery`, then falls back to indexed source search if available.
@@ -57,7 +57,7 @@ npm run deploy:tensorlake
 npm run trigger:agent
 ```
 
-Create the 5-minute cron:
+Create the 3-minute cron:
 
 ```bash
 npm run deploy:tensorlake:cron
