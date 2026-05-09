@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Clock3,
   Code2,
+  DatabaseZap,
   FlaskConical,
   Globe2,
   Loader2,
@@ -32,7 +33,7 @@ export function ReviewBoard({ initialUsers, initialRuns }: Props) {
     Object.fromEntries(initialUsers.map((u) => [u.id, u.draft_message ?? ""]))
   );
   const [topBusy, setTopBusy] = useState<"refresh" | "trigger" | null>(null);
-  const [rowBusy, setRowBusy] = useState<Record<string, "save" | "send">>({});
+  const [rowBusy, setRowBusy] = useState<Record<string, "save" | "send" | "knowledge">>({});
   const [filter, setFilter] = useState<FilterId>("pending");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [highlightedUserId, setHighlightedUserId] = useState<string | null>(null);
@@ -207,6 +208,23 @@ export function ReviewBoard({ initialUsers, initialRuns }: Props) {
     }
   }
 
+  async function addToKnowledgeGraph(userId: string) {
+    setRowBusy((current) => ({ ...current, [userId]: "knowledge" }));
+    try {
+      const response = await fetch(`/api/detected-users/${userId}/knowledge`, { method: "POST" });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || "Hyperspell write failed");
+      }
+    } finally {
+      setRowBusy((current) => {
+        const next = { ...current };
+        delete next[userId];
+        return next;
+      });
+    }
+  }
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const sendTo = params.get("sendTo");
@@ -368,6 +386,7 @@ export function ReviewBoard({ initialUsers, initialRuns }: Props) {
                     }
                     onSave={() => saveDraft(user.id)}
                     onSend={() => send(user.id)}
+                    onAddToKnowledgeGraph={() => addToKnowledgeGraph(user.id)}
                     busy={rowBusy[user.id] ?? null}
                     highlighted={highlightedUserId === user.id}
                   />
@@ -690,6 +709,7 @@ function UserRow({
   onDraftChange,
   onSave,
   onSend,
+  onAddToKnowledgeGraph,
   busy,
   highlighted,
   showDetailsLink = true,
@@ -699,6 +719,7 @@ function UserRow({
   onDraftChange: (v: string) => void;
   onSave: () => void;
   onSend: () => void;
+  onAddToKnowledgeGraph: () => void;
   busy: string | null;
   highlighted: boolean;
   showDetailsLink?: boolean;
@@ -741,15 +762,15 @@ function UserRow({
           <ActivityChart profile={profile} />
 
           <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2">
-            <Reason title="Why detected" body={user.detection_reason} />
-            <Reason title="Activity summary" body={user.activity_summary} />
+            <Reason title="Why churned" body={user.detection_reason} />
+            <Reason title="Nia-augmented activity summary" body={user.activity_summary} />
           </div>
 
           {user.event_timeline ? (
             <details className="mt-4 rounded-md bg-paper2 px-3 py-2">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
                 <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-                  raw event timeline
+                  Raw events timeline from PostHog
                 </span>
                 <ChevronDown size={11} className="text-mute" />
               </summary>
@@ -808,11 +829,23 @@ function UserRow({
             </div>
             <div className="flex items-center gap-2">
               <button
+                onClick={onAddToKnowledgeGraph}
+                disabled={busy !== null}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-line bg-white px-3 text-[12px] font-medium text-ink transition-colors hover:bg-paper2 disabled:opacity-50"
+              >
+                {busy === "knowledge" ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : (
+                  <DatabaseZap size={13} />
+                )}
+                Add to knowledge graph
+              </button>
+              <button
                 onClick={onSave}
                 disabled={!dirty || busy !== null}
                 className="inline-flex h-8 items-center gap-1.5 rounded-md border border-line bg-white px-3 text-[12px] font-medium text-ink transition-colors hover:bg-paper2 disabled:opacity-50"
               >
-                {busy === `save:${user.id}` ? (
+                {busy === "save" ? (
                   <Loader2 size={13} className="animate-spin" />
                 ) : null}
                 Save
@@ -826,7 +859,7 @@ function UserRow({
                   <>
                     <Check size={12} /> Sent
                   </>
-                ) : busy === `send:${user.id}` ? (
+                ) : busy === "send" ? (
                   <>
                     <Loader2 size={13} className="animate-spin" /> Sending
                   </>
@@ -847,7 +880,7 @@ function UserRow({
 export function FocusedUserCard({ user }: { user: DetectedUser }) {
   const [draft, setDraft] = useState(user.draft_message ?? "");
   const [currentUser, setCurrentUser] = useState(user);
-  const [busy, setBusy] = useState<"save" | "send" | null>(null);
+  const [busy, setBusy] = useState<"save" | "send" | "knowledge" | null>(null);
 
   async function saveDraft() {
     setBusy("save");
@@ -873,6 +906,19 @@ export function FocusedUserCard({ user }: { user: DetectedUser }) {
     }
   }
 
+  async function addToKnowledgeGraph() {
+    setBusy("knowledge");
+    try {
+      const response = await fetch(`/api/detected-users/${user.id}/knowledge`, { method: "POST" });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || "Hyperspell write failed");
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <UserRow
       user={currentUser}
@@ -880,6 +926,7 @@ export function FocusedUserCard({ user }: { user: DetectedUser }) {
       onDraftChange={setDraft}
       onSave={saveDraft}
       onSend={sendDraft}
+      onAddToKnowledgeGraph={addToKnowledgeGraph}
       busy={busy}
       highlighted={false}
       showDetailsLink={false}

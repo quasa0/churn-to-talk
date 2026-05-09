@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import re
 import sqlite3
 import time
 import urllib.error
@@ -442,14 +443,12 @@ def generate_mock_users(app_context: str) -> list[dict[str, Any]]:
                     "required": [
                         "name",
                         "email",
-                        "detection_reason",
                         "event_timeline",
                         "engagement",
                     ],
                     "properties": {
                         "name": {"type": "string"},
                         "email": {"type": "string"},
-                        "detection_reason": {"type": "string"},
                         "event_timeline": {"type": "string"},
                         "engagement": {
                             "type": "object",
@@ -493,7 +492,7 @@ def generate_mock_users(app_context: str) -> list[dict[str, Any]]:
         },
     }
     prompt = f"""
-Generate {count} realistic fake churned fastclip.it users.
+Generate {count} realistic fake churned fastclip.it users and raw PostHog-style event timelines.
 
 App context from Nia:
 {app_context}
@@ -501,14 +500,19 @@ App context from Nia:
 Use these exact made-up identities in order, one per generated user. Do not invent different names or emails:
 {json.dumps(identities, indent=2)}
 
-Each user must be made up, B2C creator/prosumer, and include a specific sequence of app actions over multiple visits.
+Each user must be made up, B2C creator/prosumer, and include a specific sequence of raw app actions over multiple visits.
 Each email must use one of these hackathon sponsor domains exactly: {", ".join(SPONSOR_DOMAINS)}.
 Use realistic personal-looking work emails, for example first.last@vercel.com or first@tensorlake.ai. Do not use example.com, gmail.com, yahoo.com, outlook.com, or fastclip.it.
 
-Make the behavioral data feel like a real product analytics trace, not a generic CRM note:
-- event_timeline must be a compact action-token string like:
-  "signup • upload(Brave Convos #14, 47m) • generate_clips(8) • preview_clip • open_editor • timeline_drag(x6) • caption_edit(x4) • bounce • return(d3) • open_editor • export_failed • bounce • return(d5) • view_pricing • bounce"
+Make the behavioral data feel like raw PostHog event data, not a generic CRM note:
+- event_timeline must be a compact timestamped action-token string. Every action must end with an explicit "days ago + time" timestamp in this exact format: "action t-13 13:00". Use realistic times and keep them chronological from oldest to newest.
+- Example:
+  "signup t-13 10:20 • upload(Brave Convos #14, 47m) t-13 10:22 • generate_clip(1/8) t-13 10:24 • generate_clip(2/8) t-13 10:24 • generate_clip(3/8) t-13 10:25 • generate_clip(4/8) t-13 10:25 • generate_clip(5/8) t-13 10:26 • generate_clip(6/8) t-13 10:26 • generate_clip(7/8) t-13 10:27 • generate_clip(8/8) t-13 10:27 • preview_clip(3/8) t-13 10:29 • bounce t-13 10:29 • return t-6 18:45 • generate_clip(9/10) t-6 18:48 • generate_clip(10/10) t-6 18:49 • preview_clip(9/10) t-6 18:51 • preview_clip(1/8) t-6 18:52 • bounce t-6 18:53 • return t-1 09:12 • view_pricing t-1 09:14"
+- Do not use aggregate actions like generate_clips(8), preview_clip(x4), timeline_drag(x6), or caption_edit(x4). Every repeated action must be separate with its own timestamp: generate_clip(1/8), generate_clip(2/8), etc.
+- Do not use bare return(d3) style. Use "return t-6 18:45" instead.
+- Do not imply an event happened unless it appears explicitly with its own timestamp.
 - Include concrete media/project details: podcast episode titles, webinar titles, creator niches, source length, batch counts, file sizes, or connected channels.
+- Do not generate churn explanations, detection reasons, or activity summaries in this step. This step only creates the fake user identity, raw PostHog-style event timeline, and numeric engagement telemetry.
 - Use a wide range of churn patterns. Pick creative, specific reasons from this list and do not repeat the same reason style within one run:
   1. generated useful clips but exported zero
   2. dragged trim handles repeatedly and left
@@ -540,8 +544,6 @@ Make the behavioral data feel like a real product analytics trace, not a generic
   28. opened help/docs/search and then went dormant
   29. copied share link but never downloaded final video
   30. saw processing complete email but did not return for export
-- Detection reasons should be short behavioral phrases, e.g. "returned twice after generating 8 clips but never exported" or "2.3GB import failed twice, then 12 days dormant".
-
 Generate engagement metrics for the visual timeline:
 - onboardedDaysAgo: 9-21
 - dormantDays: 7-14, always less than onboardedDaysAgo
@@ -564,14 +566,129 @@ def pack_event_timeline(user: dict[str, Any]) -> dict[str, Any]:
     timeline = str(user.get("event_timeline") or "").strip()
     engagement = user.pop("engagement", None)
     if not isinstance(engagement, dict):
+        user["event_timeline"] = normalize_event_timeline(timeline)
         return user
 
     payload = {
-        "events": timeline,
+        "events": normalize_event_timeline(timeline),
         "engagement": sanitize_engagement(engagement),
     }
     user["event_timeline"] = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
     return user
+
+
+def normalize_event_timeline(timeline: str) -> str:
+    raw_parts = [part.strip() for part in re.split(r"\s*•\s*", timeline) if part.strip()]
+    if not raw_parts:
+        return timeline
+
+    parsed_parts = [parse_timeline_part(part) for part in raw_parts]
+    source_days = [item["source_day"] for item in parsed_parts if item.get("source_day")]
+    max_source_day = max(source_days) if source_days else 1
+
+    def to_days_ago(source_day: int) -> int:
+        if max_source_day > 1:
+            return max(1, max_source_day - source_day + 1)
+        return 13
+
+    expanded_events: list[dict[str, Any]] = []
+    current_source_day = 1
+    minute_by_day: dict[int, int] = {}
+    generated_clip_count = 0
+
+    for item in parsed_parts:
+        action = str(item["action"]).strip()
+        if item.get("source_day"):
+            current_source_day = int(item["source_day"])
+        if item.get("days_ago"):
+            days_ago = int(item["days_ago"])
+        else:
+            days_ago = to_days_ago(current_source_day)
+
+        minute = item.get("minute")
+        if minute is None:
+            if current_source_day not in minute_by_day:
+                minute_by_day[current_source_day] = (10 * 60 + 20) if current_source_day == 1 else (18 * 60 + 45)
+            minute = minute_by_day[current_source_day]
+
+        repeated, generated_clip_count = expand_action(action, generated_clip_count)
+        for repeat_index, repeated_action in enumerate(repeated):
+            event_minute = int(minute) + (repeat_index // 2)
+            expanded_events.append(
+                {
+                    "action": repeated_action,
+                    "days_ago": days_ago,
+                    "minute": min(23 * 60 + 59, event_minute),
+                }
+            )
+
+        minute_by_day[current_source_day] = min(
+            23 * 60 + 55,
+            int(minute) + max(2, len(repeated) // 2 + random.choice([2, 3, 4])),
+        )
+
+    return " • ".join(format_timeline_event(event) for event in expanded_events)
+
+
+def parse_timeline_part(part: str) -> dict[str, Any]:
+    value = part.strip()
+
+    trailing_t = re.match(r"^(.+?)\s+t-(\d+)d?\s+(\d{1,2}):(\d{2})$", value, flags=re.IGNORECASE)
+    if trailing_t:
+        return {
+            "action": trailing_t.group(1).strip(),
+            "days_ago": max(1, int(trailing_t.group(2))),
+            "minute": int(trailing_t.group(3)) * 60 + int(trailing_t.group(4)),
+        }
+
+    leading_t = re.match(r"^t-(\d+)d?\s+(\d{1,2}):(\d{2})\s+(.+)$", value, flags=re.IGNORECASE)
+    if leading_t:
+        return {
+            "action": leading_t.group(4).strip(),
+            "days_ago": max(1, int(leading_t.group(1))),
+            "minute": int(leading_t.group(2)) * 60 + int(leading_t.group(3)),
+        }
+
+    leading_d_time = re.match(r"^d(\d+)\s+(\d{1,2}):(\d{2})\s+(.+)$", value, flags=re.IGNORECASE)
+    if leading_d_time:
+        return {
+            "action": leading_d_time.group(4).strip(),
+            "source_day": max(1, int(leading_d_time.group(1))),
+            "minute": int(leading_d_time.group(2)) * 60 + int(leading_d_time.group(3)),
+        }
+
+    leading_d = re.match(r"^d(\d+)\s+(.+)$", value, flags=re.IGNORECASE)
+    if leading_d:
+        return {"action": leading_d.group(2).strip(), "source_day": max(1, int(leading_d.group(1)))}
+
+    return_d = re.match(r"^return\(d(\d+)\)$", value, flags=re.IGNORECASE)
+    if return_d:
+        return {"action": "return", "source_day": max(1, int(return_d.group(1)))}
+
+    return {"action": value}
+
+
+def expand_action(action: str, generated_clip_count: int = 0) -> tuple[list[str], int]:
+    named_count = re.match(r"^generate_clips\((\d+)\)$", action, flags=re.IGNORECASE)
+    if named_count:
+        count = min(12, max(1, int(named_count.group(1))))
+        if generated_clip_count:
+            total = generated_clip_count + count
+            return [f"generate_clip({i}/{total})" for i in range(generated_clip_count + 1, total + 1)], total
+        return [f"generate_clip({i}/{count})" for i in range(1, count + 1)], count
+
+    count_match = re.match(r"^([a-z_]+)\((?:x)?(\d+)\)$", action, flags=re.IGNORECASE)
+    if count_match and count_match.group(1) in {"preview_clip", "timeline_drag", "caption_edit", "hook_edit", "caption_style_changed"}:
+        name = count_match.group(1)
+        count = min(12, max(1, int(count_match.group(2))))
+        return [f"{name}({i}/{count})" for i in range(1, count + 1)], generated_clip_count
+
+    return [action], generated_clip_count
+
+
+def format_timeline_event(event: dict[str, Any]) -> str:
+    minute = int(event["minute"])
+    return f"{event['action']} t-{int(event['days_ago'])} {minute // 60:02d}:{minute % 60:02d}"
 
 
 def sanitize_engagement(engagement: dict[str, Any]) -> dict[str, Any]:
@@ -645,9 +762,10 @@ def draft_messages(users: list[dict[str, Any]], app_context: str) -> list[dict[s
                 "items": {
                     "type": "object",
                     "additionalProperties": False,
-                    "required": ["email", "activity_summary", "draft_message"],
+                    "required": ["email", "detection_reason", "activity_summary", "draft_message"],
                     "properties": {
                         "email": {"type": "string"},
+                        "detection_reason": {"type": "string"},
                         "activity_summary": {"type": "string"},
                         "draft_message": {"type": "string"},
                     },
@@ -656,18 +774,19 @@ def draft_messages(users: list[dict[str, Any]], app_context: str) -> list[dict[s
         },
     }
     prompt = f"""
-Write founder-voice recovery material for these fake churned fastclip.it users.
+Use the Nia-provided fastclip.it context plus raw PostHog-style events to enrich these fake churned users, then draft founder recovery emails.
 
-App context:
+Nia-provided fastclip.it context:
 {app_context}
 
-Users:
+Raw mock users and PostHog-style events:
 {json.dumps(users, ensure_ascii=True)}
 
 For each user, return:
 - email: same email as input
-- activity_summary: one compact paragraph describing what they tried and where they likely got stuck
-- draft_message: 1-2 very short sentences only. Write like a real busy founder texting a user, all lowercase, casual, slightly imperfect, no subject line, no greeting block, no signoff, no marketing language, no em dash. Mention one specific thing they did and ask one simple question. Example style: "hey, saw you got clips generated but never exported. did the editor feel annoying or was the clip quality just not there?"
+- detection_reason: short "why churned" phrase grounded in the raw events and enriched by Nia context. Example: "export failed after 8 generated clips, then they returned only to check pricing"
+- activity_summary: one compact Nia-augmented paragraph describing the raw actions, relevant fastclip workflow/context, and where they likely got stuck. Do not invent events not in the raw timeline.
+- draft_message: 1-2 very short sentences only. This is the final OpenAI-written founder email. Write like a real busy founder texting a user, all lowercase, casual, slightly imperfect, no subject line, no greeting block, no signoff, no marketing language, no em dash. Mention one specific thing they did and ask one simple question. Example style: "hey, saw you got clips generated but never exported. did the editor feel annoying or was the clip quality just not there?"
 """
     drafts = _openai_structured(prompt, schema)["drafts"]
     by_email = {draft["email"].lower(): draft for draft in drafts}
