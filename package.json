@@ -1,0 +1,39 @@
+{
+  "name": "churn-to-talk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "setup:db": "tsx scripts/setup-db.ts",
+    "index:nia": "tsx scripts/index-nia.ts",
+    "trigger:agent": "tsx scripts/trigger-agent.ts",
+    "setup:tensorlake:secrets": "tsx scripts/set-tensorlake-secrets.ts",
+    "deploy:tensorlake": "tsx scripts/tl.ts deploy agent/churn_recovery_agent.py",
+    "deploy:tensorlake:cron": "tsx scripts/tl.ts cron create --schedule \"*/15 * * * *\" churn_recovery_agent --input-json '{\"source\":\"cron\"}'",
+    "deploy:vercel": "tsx scripts/deploy-vercel.ts"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.15.15",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.468.0",
+    "next": "^14.2.24",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.10",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^14.2.24",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
