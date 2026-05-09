@@ -1,246 +1,1188 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Mail, Play, RefreshCw, Save, Sparkles } from "lucide-react";
-import type { DetectedUser, RunHistoryItem } from "@/app/lib/types";
+import {
+  ArrowRight,
+  Check,
+  ChevronDown,
+  Clock3,
+  Code2,
+  FlaskConical,
+  Globe2,
+  Loader2,
+  RefreshCw,
+  Terminal,
+  Zap,
+} from "lucide-react";
 import { clsx } from "clsx";
+import type { DetectedUser, RunHistoryItem } from "@/app/lib/types";
 
 type Props = {
   initialUsers: DetectedUser[];
   initialRuns: RunHistoryItem[];
 };
 
+type FilterId = "pending" | "sent" | "all";
+
 export function ReviewBoard({ initialUsers, initialRuns }: Props) {
-  const [users, setUsers] = useState(initialUsers);
-  const [runs, setRuns] = useState(initialRuns);
-  const [drafts, setDrafts] = useState(() =>
-    Object.fromEntries(initialUsers.map((user) => [user.id, user.draft_message ?? ""]))
+  const [users, setUsers] = useState<DetectedUser[]>(initialUsers);
+  const [runs, setRuns] = useState<RunHistoryItem[]>(initialRuns);
+  const [drafts, setDrafts] = useState<Record<string, string>>(() =>
+    Object.fromEntries(initialUsers.map((u) => [u.id, u.draft_message ?? ""]))
   );
-  const [busy, setBusy] = useState<string | null>(null);
-  const pendingCount = useMemo(() => users.filter((user) => user.status === "pending").length, [users]);
+  const [topBusy, setTopBusy] = useState<"refresh" | "trigger" | null>(null);
+  const [rowBusy, setRowBusy] = useState<Record<string, "save" | "send">>({});
+  const [filter, setFilter] = useState<FilterId>("pending");
+
+  const pendingCount = useMemo(
+    () => users.filter((u) => u.status === "pending").length,
+    [users]
+  );
+  const sentCount = useMemo(
+    () => users.filter((u) => u.status === "sent").length,
+    [users]
+  );
+  const visible = useMemo(() => {
+    if (filter === "all") return users;
+    return users.filter((u) => u.status === filter);
+  }, [users, filter]);
+
+  const lastRun = runs[0];
 
   async function loadData() {
-    const [usersResponse, runsResponse] = await Promise.all([
+    const [u, r] = await Promise.all([
       fetch("/api/detected-users", { cache: "no-store" }),
-      fetch("/api/runs", { cache: "no-store" })
+      fetch("/api/runs", { cache: "no-store" }),
     ]);
-    const usersPayload = (await usersResponse.json()) as { users: DetectedUser[] };
-    const runsPayload = (await runsResponse.json()) as { runs: RunHistoryItem[] };
+    const usersPayload = (await u.json()) as { users: DetectedUser[] };
+    const runsPayload = (await r.json()) as { runs: RunHistoryItem[] };
     setUsers(usersPayload.users);
     setRuns(runsPayload.runs);
-    setDrafts(Object.fromEntries(usersPayload.users.map((user) => [user.id, user.draft_message ?? ""])));
+    setDrafts(
+      Object.fromEntries(
+        usersPayload.users.map((x) => [x.id, x.draft_message ?? ""])
+      )
+    );
   }
 
   async function refresh() {
-    setBusy("refresh");
+    setTopBusy("refresh");
     try {
       await loadData();
     } finally {
-      setBusy(null);
+      setTopBusy(null);
     }
   }
 
   async function triggerAgent() {
-    setBusy("trigger");
+    setTopBusy("trigger");
     try {
       await fetch("/api/run-agent", { method: "POST" });
-      for (let attempt = 0; attempt < 4; attempt += 1) {
-        await sleep(3500);
+      for (let i = 0; i < 4; i++) {
+        await new Promise((res) => setTimeout(res, 3500));
         await loadData();
       }
     } finally {
-      setBusy(null);
+      setTopBusy(null);
     }
   }
 
   async function saveDraft(userId: string) {
-    setBusy(`save:${userId}`);
+    setRowBusy((current) => ({ ...current, [userId]: "save" }));
     try {
       await fetch(`/api/detected-users/${userId}/draft`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ draft_message: drafts[userId] ?? "" })
+        body: JSON.stringify({ draft_message: drafts[userId] ?? "" }),
       });
+      setUsers((curr) =>
+        curr.map((u) =>
+          u.id === userId ? { ...u, draft_message: drafts[userId] ?? "" } : u
+        )
+      );
     } finally {
-      setBusy(null);
+      setRowBusy((current) => {
+        const next = { ...current };
+        delete next[userId];
+        return next;
+      });
     }
   }
 
   async function send(userId: string) {
-    setBusy(`send:${userId}`);
+    setRowBusy((current) => ({ ...current, [userId]: "send" }));
     try {
       await fetch(`/api/detected-users/${userId}/send`, { method: "POST" });
-      setUsers((current) => current.map((user) => (user.id === userId ? { ...user, status: "sent" } : user)));
+      setUsers((curr) =>
+        curr.map((u) => (u.id === userId ? { ...u, status: "sent" } : u))
+      );
     } finally {
-      setBusy(null);
+      setRowBusy((current) => {
+        const next = { ...current };
+        delete next[userId];
+        return next;
+      });
     }
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-[1800px] flex-col gap-4 px-4 py-4 sm:px-5">
-      <header className="flex flex-col gap-3 border-b border-line pb-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-moss">
-            <Sparkles size={14} />
-            fastclip.it recovery desk
+    <div className="min-h-screen bg-paper text-ink">
+      {/* Top bar */}
+      <header className="sticky top-0 z-20 border-b border-line bg-paper/85 backdrop-blur">
+        <div className="mx-auto flex max-w-[1480px] items-center justify-between gap-6 px-8 py-3.5">
+          <div className="flex items-center gap-3">
+            <Logo />
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="text-[14px] font-semibold tracking-tight sm:text-[15px]">
+                Churn -&gt; to -&gt; Talk | Command Center
+              </span>
+              <span className="hidden h-4 w-px bg-line sm:block" />
+              <span className="rounded-md border border-line bg-white px-2 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-mute">
+                fastclip.it
+              </span>
+            </div>
           </div>
-          <h1 className="mt-1 text-2xl font-semibold text-ink sm:text-3xl">Churn Recovery Agent</h1>
-          <p className="mt-1 max-w-2xl text-sm text-moss">
-            Review founder-voice drafts for users who tried fastclip.it, hit friction, and disappeared.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={refresh}
-            disabled={busy !== null}
-            className="inline-flex h-9 items-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-semibold text-ink shadow-sm disabled:opacity-60"
-          >
-            <RefreshCw size={16} />
-            Refresh
-          </button>
-          <button
-            onClick={triggerAgent}
-            disabled={busy !== null}
-            className="inline-flex h-9 items-center gap-2 rounded-md bg-action px-4 text-sm font-semibold text-white shadow-sm disabled:opacity-60"
-          >
-            <Play size={16} />
-            Trigger Agent Now
-          </button>
+
+          <div className="hidden items-center gap-7 md:flex">
+            <TopStat k="pending" v={pendingCount} />
+            <TopStat k="sent" v={sentCount} />
+            <TopStat
+              k="last run"
+              v={lastRun ? relativeFromNow(lastRun.ran_at) : "—"}
+              mono
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={refresh}
+              disabled={topBusy !== null}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-line bg-white px-2.5 text-[12px] font-medium text-ink transition-colors hover:bg-paper2 disabled:opacity-50"
+            >
+              <RefreshCw
+                size={13}
+                className={topBusy === "refresh" ? "animate-spin" : ""}
+              />
+              Refresh
+            </button>
+            <button
+              onClick={triggerAgent}
+              disabled={topBusy !== null}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-ink px-3 text-[12px] font-medium text-paper transition-colors hover:bg-black disabled:opacity-60"
+            >
+              {topBusy === "trigger" ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Zap size={12} />
+              )}
+              {topBusy === "trigger" ? "Running…" : "Trigger agent"}
+            </button>
+          </div>
         </div>
       </header>
 
-      <section className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)]">
-        <aside className="h-fit rounded-md border border-line bg-white p-3 shadow-soft lg:sticky lg:top-4">
-          <h2 className="text-base font-semibold text-ink">Run History</h2>
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            <Metric label="Pending" value={pendingCount.toString()} />
-            <Metric label="Users" value={users.length.toString()} />
-            <Metric label="Runs" value={runs.length.toString()} />
+      <main className="mx-auto max-w-[1480px] px-8 pb-24 pt-8">
+        {/* Hero */}
+        <div className="grid grid-cols-12 items-end gap-10">
+          <div className="col-span-12 lg:col-span-8">
+            <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-mute">
+              churn recovery · agent
+            </div>
+            <h1 className="mt-3 max-w-3xl text-[44px] font-semibold leading-[1.05] tracking-tight">
+              {pendingCount} {pendingCount === 1 ? "draft" : "drafts"} waiting
+              for your voice.
+            </h1>
+            <p className="mt-3 max-w-xl text-[14.5px] leading-[1.6] text-mute">
+              The agent generates founder-voice recovery emails for users who
+              hit friction and disappeared. Read the trail, edit a line, send
+              it yourself.
+            </p>
           </div>
-          <div className="mt-3 flex flex-col gap-2">
-            {runs.length === 0 ? (
-              <p className="text-sm text-moss">No runs logged yet.</p>
-            ) : (
-              runs.map((run) => (
-                <div key={run.key} className="rounded-md bg-field px-3 py-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-ink">{formatDate(run.ran_at)}</p>
-                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-moss">
-                      {run.users_found ?? 0} users
+          <div className="col-span-12 lg:col-span-4">
+            <Cadence pendingCount={pendingCount} sentCount={sentCount} />
+          </div>
+        </div>
+
+        <div className="mt-12 grid grid-cols-12 gap-10">
+          {/* Run history rail */}
+          <aside className="col-span-12 lg:col-span-3">
+            <RunHistory runs={runs} />
+          </aside>
+
+          {/* User list */}
+          <section className="col-span-12 lg:col-span-9">
+            <div className="flex items-end justify-between border-b border-line pb-3">
+              <div className="flex items-baseline gap-3">
+                <h2 className="text-[15px] font-semibold tracking-tight">
+                  Detected users
+                </h2>
+                <span className="font-mono text-[11px] text-mute">
+                  {visible.length} shown
+                </span>
+              </div>
+              <FilterTabs
+                value={filter}
+                onChange={setFilter}
+                counts={{
+                  pending: pendingCount,
+                  sent: sentCount,
+                  all: users.length,
+                }}
+              />
+            </div>
+
+            <div className="mt-6 flex flex-col gap-6">
+              {visible.length === 0 ? (
+                <EmptyState />
+              ) : (
+                visible.map((user) => (
+                  <UserRow
+                    key={user.id}
+                    user={user}
+                    draft={drafts[user.id] ?? ""}
+                    onDraftChange={(v) =>
+                      setDrafts((c) => ({ ...c, [user.id]: v }))
+                    }
+                    onSave={() => saveDraft(user.id)}
+                    onSend={() => send(user.id)}
+                    busy={rowBusy[user.id] ?? null}
+                  />
+                ))
+              )}
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+// ───────────────────────────── Top bar pieces
+
+function TopStat({ k, v, mono = false }: { k: string; v: string | number; mono?: boolean }) {
+  return (
+    <div className="flex items-baseline gap-2">
+      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+        {k}
+      </span>
+      <span
+        className={clsx(
+          "text-[13px] font-semibold tabular-nums",
+          mono && "font-mono"
+        )}
+      >
+        {v}
+      </span>
+    </div>
+  );
+}
+
+function Logo() {
+  return (
+    <div className="flex h-7 w-7 items-center justify-center rounded-md border border-line bg-white">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <circle cx="7" cy="7" r="6" stroke="#111714" strokeWidth="1.4" />
+        <path
+          d="M3.5 7.5 L6 10 L10.5 4.5"
+          stroke="#4F7A5C"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        />
+      </svg>
+    </div>
+  );
+}
+
+// ───────────────────────────── Cadence card
+
+function Cadence({
+  pendingCount,
+  sentCount,
+}: {
+  pendingCount: number;
+  sentCount: number;
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-line bg-line">
+      <CadenceCell label="pending" value={pendingCount} accent="amber" />
+      <CadenceCell label="sent today" value={sentCount} accent="moss" />
+      <CadenceCell label="every" value="15m" mono />
+    </div>
+  );
+}
+
+function CadenceCell({
+  label,
+  value,
+  accent,
+  mono,
+}: {
+  label: string;
+  value: string | number;
+  accent?: "amber" | "moss";
+  mono?: boolean;
+}) {
+  const dot =
+    accent === "amber"
+      ? "bg-amber"
+      : accent === "moss"
+      ? "bg-moss"
+      : "bg-mute2";
+  return (
+    <div className="bg-white p-4">
+      <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+        <span className={clsx("h-1.5 w-1.5 rounded-full", dot)} />
+        {label}
+      </div>
+      <div
+        className={clsx(
+          "mt-2 text-[26px] font-semibold tabular-nums",
+          mono && "font-mono"
+        )}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+// ───────────────────────────── Filter tabs
+
+function FilterTabs({
+  value,
+  onChange,
+  counts,
+}: {
+  value: FilterId;
+  onChange: (v: FilterId) => void;
+  counts: Record<FilterId, number>;
+}) {
+  const opts: { id: FilterId; label: string }[] = [
+    { id: "pending", label: "Pending" },
+    { id: "sent", label: "Sent" },
+    { id: "all", label: "All" },
+  ];
+  return (
+    <div className="flex items-center gap-1 rounded-md border border-line bg-white p-0.5">
+      {opts.map((o) => {
+        const active = value === o.id;
+        return (
+          <button
+            key={o.id}
+            onClick={() => onChange(o.id)}
+            className={clsx(
+              "inline-flex h-7 items-center gap-1.5 rounded px-2.5 text-[12px] font-medium transition-colors",
+              active ? "bg-ink text-paper" : "text-mute hover:text-ink"
+            )}
+          >
+            {o.label}
+            <span
+              className={clsx(
+                "font-mono text-[10px]",
+                active ? "text-paper/70" : "text-mute2"
+              )}
+            >
+              {counts[o.id] ?? 0}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ───────────────────────────── Run history sidebar
+
+function RunHistory({ runs }: { runs: RunHistoryItem[] }) {
+  return (
+    <div className="lg:sticky lg:top-[68px]">
+      <div className="border-b border-line pb-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-[15px] font-semibold tracking-tight">Tensorlake runs</h2>
+          <span className="font-mono text-[10px] tabular-nums text-mute">
+            {runs.length}/1000
+          </span>
+        </div>
+        <p className="mt-1 font-mono text-[11px] text-mute">
+          Tensorlake CRON · every 15 minutes
+        </p>
+      </div>
+
+      {runs.length === 0 ? (
+        <p className="mt-4 text-sm text-mute">No runs logged yet.</p>
+      ) : (
+        <ol
+          className="mt-5 flex max-h-[min(1680px,calc(100vh-145px))] flex-col overflow-y-auto pr-2"
+          aria-label="Last 1000 agent runs"
+        >
+          {runs.map((r, i) => {
+            const source = runSourceMeta(r.source);
+            const Icon = source.icon;
+            return (
+              <li
+                key={r.key}
+                className="relative grid grid-cols-[26px_1fr] gap-3 pb-5"
+              >
+                {i < runs.length - 1 && (
+                  <span className="absolute left-[12px] top-5 h-full w-px bg-line" />
+                )}
+                <span
+                  className={clsx(
+                    "relative z-10 mt-0.5 flex h-6 w-6 items-center justify-center rounded-full ring-4 ring-paper",
+                    source.dot
+                  )}
+                >
+                  <Icon size={12} strokeWidth={2.3} className="text-white" />
+                </span>
+                <div className="min-w-0">
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2">
+                    <span
+                      className={clsx(
+                        "font-mono text-[11px] tabular-nums text-ink",
+                        source.isCron && "font-bold"
+                      )}
+                    >
+                      {fmtClock(r.ran_at)}
+                    </span>
+                    <span
+                      className={clsx(
+                        "justify-self-end rounded px-1.5 py-0.5 text-right font-mono text-[9.5px] leading-tight tracking-[0.04em]",
+                        source.badge
+                      )}
+                    >
+                      {source.label}
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-moss">{run.status ?? "complete"} · {run.source ?? "agent"}</p>
-                </div>
-              ))
-            )}
-          </div>
-        </aside>
-
-        <div className="flex flex-col gap-3">
-          {users.length === 0 ? (
-            <div className="rounded-md border border-dashed border-line bg-white p-8 text-center text-moss">
-              No detected users yet. Trigger the agent after Turso and Tensorlake env vars are configured.
-            </div>
-          ) : (
-            users.map((user) => (
-              <article
-                key={user.id}
-                className="grid gap-3 rounded-md border border-line bg-white p-3 shadow-sm xl:grid-cols-[220px_minmax(0,1fr)_minmax(360px,0.9fr)]"
-              >
-                <div className="flex flex-col gap-2">
-                  <div>
-                    <h2 className="truncate text-base font-semibold text-ink">{user.name}</h2>
-                    <p className="mt-0.5 truncate text-xs text-moss">{user.email}</p>
-                  </div>
-                  <span
-                    className={clsx(
-                      "inline-flex w-fit items-center rounded-full px-2.5 py-0.5 text-xs font-semibold",
-                      user.status === "sent" ? "bg-green-100 text-success" : "bg-amber-100 text-warning"
+                  <div className="mt-0.5 text-[12.5px] text-mute">
+                    {(r.users_found ?? 0) > 0 ? (
+                      <span>
+                        <span className="font-semibold text-ink tabular-nums">
+                          {r.users_found}
+                        </span>{" "}
+                        {r.users_found === 1 ? "user" : "users"} surfaced
+                      </span>
+                    ) : (
+                      <span className="text-mute2">no signal</span>
                     )}
-                  >
-                    {user.status}
-                  </span>
-                  <details className="rounded-md bg-field px-2.5 py-2 text-xs text-moss">
-                    <summary className="cursor-pointer font-semibold text-ink">timeline</summary>
-                    <pre className="mt-2 whitespace-pre-wrap font-sans text-xs leading-5">{user.event_timeline}</pre>
-                  </details>
-                </div>
-
-                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-                  <InfoBlock title="Why detected" value={user.detection_reason} />
-                  <InfoBlock title="Activity summary" value={user.activity_summary} />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-moss" htmlFor={`draft-${user.id}`}>
-                    Draft
-                  </label>
-                  <textarea
-                    id={`draft-${user.id}`}
-                    value={drafts[user.id] ?? ""}
-                    onChange={(event) =>
-                      setDrafts((current) => ({ ...current, [user.id]: event.target.value }))
-                    }
-                    className="mt-1 min-h-24 w-full resize-y rounded-md border border-line bg-paper p-2 text-sm leading-5 text-ink outline-none focus:border-action focus:ring-2 focus:ring-action/20 xl:min-h-28"
-                  />
-                  <div className="mt-2 flex flex-wrap justify-end gap-2">
-                    <button
-                      onClick={() => saveDraft(user.id)}
-                      disabled={busy !== null}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-md border border-line bg-white px-2.5 text-xs font-semibold text-ink disabled:opacity-60"
-                    >
-                      <Save size={14} />
-                      Save
-                    </button>
-                    <button
-                      onClick={() => send(user.id)}
-                      disabled={busy !== null || user.status === "sent"}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-md bg-success px-2.5 text-xs font-semibold text-white disabled:opacity-60"
-                    >
-                      {user.status === "sent" ? <Check size={14} /> : <Mail size={14} />}
-                      Send
-                    </button>
                   </div>
                 </div>
-              </article>
-            ))
-          )}
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+function runSourceMeta(source?: string) {
+  const normalized = (source ?? "agent").toLowerCase();
+  if (normalized === "cron") {
+    return {
+      label: "Tensorlake CRON",
+      dot: "bg-moss",
+      badge: "bg-mossSoft text-moss",
+      icon: Clock3,
+      isCron: true,
+    };
+  }
+  if (normalized === "manual-script" || normalized === "manual") {
+    return {
+      label: "Manually over CLI",
+      dot: "bg-amber",
+      badge: "bg-amberSoft text-amber",
+      icon: Terminal,
+      isCron: false,
+    };
+  }
+  if (normalized === "vercel-ui" || normalized === "vercel") {
+    return {
+      label: "Web UI Trigger",
+      dot: "bg-[#2F7EA3]",
+      badge: "bg-[#E4F1F6] text-[#246A8A]",
+      icon: Globe2,
+      isCron: false,
+    };
+  }
+  if (normalized === "local") {
+    return {
+      label: "Local test",
+      dot: "bg-amber",
+      badge: "bg-amberSoft text-amber",
+      icon: FlaskConical,
+      isCron: false,
+    };
+  }
+  return {
+    label: sourceLabel(source),
+    dot: "bg-mute",
+    badge: "bg-paper2 text-mute",
+    icon: Code2,
+    isCron: false,
+  };
+}
+
+function sourceLabel(source?: string) {
+  if (!source) return "Agent";
+  return source
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+// ───────────────────────────── User row
+
+function UserRow({
+  user,
+  draft,
+  onDraftChange,
+  onSave,
+  onSend,
+  busy,
+}: {
+  user: DetectedUser;
+  draft: string;
+  onDraftChange: (v: string) => void;
+  onSave: () => void;
+  onSend: () => void;
+  busy: string | null;
+}) {
+  const dirty = draft !== (user.draft_message ?? "");
+  const sent = user.status === "sent";
+  const profile = useMemo(() => deriveEngagement(user), [user]);
+
+  return (
+    <article className="overflow-hidden rounded-xl border border-line bg-white">
+      <header className="flex flex-wrap items-start justify-between gap-6 border-b border-line px-6 pt-5 pb-4">
+        <div className="flex min-w-0 items-start gap-4">
+          <Avatar name={user.name ?? "?"} />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5">
+              <h3 className="truncate text-[17px] font-semibold tracking-tight">
+                {user.name ?? "Unknown"}
+              </h3>
+              <StatusPill status={user.status} />
+            </div>
+            <div className="mt-1 flex items-center gap-2 font-mono text-[11.5px] text-mute">
+              <span className="truncate">{user.email ?? "—"}</span>
+              <span className="text-line">·</span>
+              <span>detected {relativeFromNow(user.detected_at)}</span>
+            </div>
+          </div>
         </div>
-      </section>
-    </main>
+
+        <KPIStrip profile={profile} />
+      </header>
+
+      <div className="grid grid-cols-12 gap-0 lg:divide-x lg:divide-line">
+        <div className="col-span-12 px-6 py-5 lg:col-span-7">
+          <ActivityChart profile={profile} />
+
+          <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <Reason title="Why detected" body={user.detection_reason} />
+            <Reason title="Activity summary" body={user.activity_summary} />
+          </div>
+
+          {user.event_timeline ? (
+            <details className="mt-4 rounded-md bg-paper2 px-3 py-2">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+                <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+                  raw event timeline
+                </span>
+                <ChevronDown size={11} className="text-mute" />
+              </summary>
+              <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words font-mono text-[11.5px] leading-[1.7] text-ink">
+                {eventTimelineText(user.event_timeline)}
+              </pre>
+            </details>
+          ) : null}
+        </div>
+
+        <div className="col-span-12 border-t border-line px-6 py-5 lg:col-span-5 lg:border-t-0">
+          <div className="flex items-center justify-between">
+            <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+              Founder-voice draft
+            </div>
+            <div className="font-mono text-[10px] tabular-nums text-mute2">
+              {draft.length} chars
+            </div>
+          </div>
+
+          <textarea
+            value={draft}
+            onChange={(e) => onDraftChange(e.target.value)}
+            rows={11}
+            spellCheck={false}
+            className="mt-2 w-full resize-none rounded-md border border-line bg-paper p-3.5 text-[13.5px] leading-[1.65] text-ink outline-none focus:border-ink focus:ring-2 focus:ring-ink/5"
+          />
+
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <div className="font-mono text-[11px] text-mute">
+              {dirty ? (
+                <span className="text-amber">● unsaved edit</span>
+              ) : (
+                <span>synced</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onSave}
+                disabled={!dirty || busy !== null}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-line bg-white px-3 text-[12px] font-medium text-ink transition-colors hover:bg-paper2 disabled:opacity-50"
+              >
+                {busy === `save:${user.id}` ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : null}
+                Save
+              </button>
+              <button
+                onClick={onSend}
+                disabled={sent || busy !== null}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-ink px-3 text-[12px] font-medium text-paper transition-colors hover:bg-black disabled:cursor-not-allowed disabled:bg-mute2"
+              >
+                {sent ? (
+                  <>
+                    <Check size={12} /> Sent
+                  </>
+                ) : busy === `send:${user.id}` ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" /> Sending
+                  </>
+                ) : (
+                  <>
+                    <ArrowRight size={12} /> Send
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+// ───────────────────────────── Card pieces
+
+function Avatar({ name }: { name: string }) {
+  const initials = name
+    .split(/\s+/)
+    .map((s) => s[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
   return (
-    <div className="rounded-md border border-line bg-paper p-2">
-      <p className="text-[11px] font-semibold text-moss">{label}</p>
-      <p className="mt-0.5 text-xl font-semibold text-ink">{value}</p>
+    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-line bg-paper2 font-mono text-[12px] font-semibold text-ink">
+      {initials || "?"}
     </div>
   );
 }
 
-function InfoBlock({ title, value }: { title: string; value: string | null }) {
+function StatusPill({ status }: { status: string }) {
+  const cfg =
+    status === "sent"
+      ? { label: "sent", cls: "bg-mossSoft text-moss", dot: "bg-moss" }
+      : status === "archived"
+      ? { label: "archived", cls: "bg-paper2 text-mute", dot: "bg-mute2" }
+      : { label: "pending", cls: "bg-amberSoft text-amber", dot: "bg-amber" };
   return (
-    <div className="min-h-24 rounded-md bg-field p-2.5">
-      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-moss">{title}</p>
-      <p className="mt-1 line-clamp-5 text-sm leading-5 text-ink">{value}</p>
+    <span
+      className={clsx(
+        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em]",
+        cfg.cls
+      )}
+    >
+      <span className={clsx("h-1.5 w-1.5 rounded-full", cfg.dot)} />
+      {cfg.label}
+    </span>
+  );
+}
+
+function KPIStrip({ profile }: { profile: EngagementProfile }) {
+  const totalMin = profile.minutes;
+  const time =
+    totalMin >= 60 ? `${Math.floor(totalMin / 60)}h ${totalMin % 60}m` : `${totalMin}m`;
+  const items = [
+    { k: "sessions", v: profile.sessions, accent: "ink" as const },
+    { k: "time", v: time, accent: "ink" as const },
+    { k: "visits", v: profile.pageVisits, accent: "ink" as const },
+    { k: "dormant", v: `${profile.dormantDays}d`, accent: "amber" as const },
+  ];
+  return (
+    <div className="hidden shrink-0 items-stretch divide-x divide-line rounded-md border border-line bg-paper2 sm:flex">
+      {items.map((it) => (
+        <div key={it.k} className="px-3.5 py-2">
+          <div className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-mute">
+            {it.k}
+          </div>
+          <div
+            className={clsx(
+              "mt-0.5 text-[15px] font-semibold tabular-nums",
+              it.accent === "amber" ? "text-amber" : "text-ink"
+            )}
+          >
+            {it.v}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
 
-function formatDate(value?: string) {
-  if (!value) return "Unknown time";
-  const date = new Date(value);
-  if (Number.isNaN(date.valueOf())) return value;
+function Reason({ title, body }: { title: string; body: string | null }) {
+  return (
+    <div className="rounded-md bg-paper2 px-3.5 py-3">
+      <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+        {title}
+      </div>
+      <p className="mt-1.5 text-[13px] leading-[1.6] text-ink">{body ?? "—"}</p>
+    </div>
+  );
+}
+
+// ───────────────────────────── Activity chart
+
+function ActivityChart({ profile }: { profile: EngagementProfile }) {
+  const total = profile.days.length;
+  const today = total - 1;
+  const dormantStart = total - profile.dormantDays;
+  const maxSessions = Math.max(2, ...profile.days.map((d) => d.sessions));
+
+  const W = 600;
+  const H = 160;
+  const padX = 14;
+  const baseline = H - 30;
+  const topPad = 50;
+  const colW = (W - padX * 2) / total;
+
+  return (
+    <div className="rounded-md border border-line bg-white">
+      <div className="flex items-end justify-between gap-4 px-4 pt-3.5">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+            Engagement trail
+          </div>
+          <div className="mt-0.5 text-[13px] text-mute">
+            <span className="font-semibold text-ink tabular-nums">
+              {profile.activeDates}
+            </span>{" "}
+            active dates over{" "}
+            <span className="font-semibold text-ink tabular-nums">
+              {profile.onboardedDaysAgo}
+            </span>{" "}
+            days
+            <span className="mx-1.5 text-mute2">·</span>
+            <span className="text-amber">
+              dormant{" "}
+              <span className="tabular-nums font-semibold">
+                {profile.dormantDays}d
+              </span>
+            </span>
+          </div>
+        </div>
+        <div className="hidden items-center gap-3 font-mono text-[10px] uppercase tracking-[0.12em] text-mute md:flex">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-sm bg-moss" />
+            active
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-sm bg-amber" />
+            dormant
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-sm bg-line" />
+            idle
+          </span>
+        </div>
+      </div>
+
+      <div className="px-2 pb-2 pt-2">
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          preserveAspectRatio="none"
+          className="block h-[140px] w-full"
+          role="img"
+          aria-label="User activity timeline"
+        >
+          <defs>
+            <pattern
+              id={`dormant-${profile.seed}`}
+              width="4"
+              height="4"
+              patternUnits="userSpaceOnUse"
+              patternTransform="rotate(45)"
+            >
+              <line x1="0" y1="0" x2="0" y2="4" stroke="#E5DCC4" strokeWidth="1" />
+            </pattern>
+          </defs>
+
+          {/* Dormant plate */}
+          {(() => {
+            const x = padX + dormantStart * colW;
+            const w = (today + 1 - dormantStart) * colW;
+            return (
+              <g>
+                <rect
+                  x={x}
+                  y={topPad}
+                  width={w}
+                  height={baseline - topPad}
+                  fill={`url(#dormant-${profile.seed})`}
+                  opacity="0.9"
+                />
+                <rect
+                  x={x}
+                  y={topPad}
+                  width={w}
+                  height={baseline - topPad}
+                  fill="#F7EFD9"
+                  opacity="0.55"
+                />
+              </g>
+            );
+          })()}
+
+          <line
+            x1={padX}
+            y1={baseline}
+            x2={W - padX}
+            y2={baseline}
+            stroke="#E5E2D9"
+            strokeWidth="1"
+          />
+
+          {profile.days.map((d, i) => {
+            const bw = Math.min(10, Math.max(4, colW * 0.28));
+            const x = padX + i * colW + (colW - bw) / 2;
+            const h =
+              d.sessions === 0
+                ? 2
+                : (d.sessions / maxSessions) * (baseline - topPad - 8);
+            const y = baseline - h;
+            const isDormant = i >= dormantStart;
+            const fill =
+              d.sessions === 0
+                ? "#E5E2D9"
+                : isDormant
+                ? "#C9A96A"
+                : "#4F7A5C";
+            return (
+              <rect key={i} x={x} y={y} width={bw} height={h} rx="3" fill={fill} />
+            );
+          })}
+
+          {(() => {
+            const x = padX + today * colW + colW * 0.5;
+            return (
+              <g>
+                <line
+                  x1={x}
+                  y1={topPad - 4}
+                  x2={x}
+                  y2={baseline + 6}
+                  stroke="#111714"
+                  strokeWidth="1.2"
+                  strokeDasharray="2 2"
+                />
+                <circle cx={x} cy={topPad - 4} r="3" fill="#111714" />
+              </g>
+            );
+          })()}
+
+          {profile.days.map((d, i) => {
+            if (!d.label) return null;
+            const x = padX + i * colW + colW * 0.5;
+            return (
+              <g key={`lbl-${i}`}>
+                <line
+                  x1={x}
+                  y1={baseline}
+                  x2={x}
+                  y2={topPad - 2}
+                  stroke="#9AA098"
+                  strokeWidth="0.5"
+                  strokeDasharray="1.5 2.5"
+                />
+                <rect
+                  x={x - 8}
+                  y={topPad - 48}
+                  width="16"
+                  height="42"
+                  rx="2"
+                  fill="#FAF9F4"
+                  stroke="#E5E2D9"
+                  strokeWidth="0.6"
+                />
+                <text
+                  x={x}
+                  y={topPad - 27}
+                  textAnchor="middle"
+                  className="fill-ink"
+                  transform={`rotate(-90 ${x} ${topPad - 27})`}
+                  style={{ fontFamily: "Geist Mono, monospace", fontSize: 9 }}
+                >
+                  {d.label}
+                </text>
+              </g>
+            );
+          })}
+
+          {profile.days.map((d, i) => {
+            if (
+              i !== 0 &&
+              i !== today &&
+              i !== dormantStart &&
+              i % 7 !== 0
+            )
+              return null;
+            const x = padX + i * colW + colW * 0.5;
+            const lbl =
+              i === 0
+                ? "d1"
+                : i === today
+                ? "now"
+                : i === dormantStart
+                ? "last seen"
+                : `d${i + 1}`;
+            const colour =
+              i === today ? "#111714" : i === dormantStart ? "#B07A2C" : "#9AA098";
+            return (
+              <text
+                key={`tick-${i}`}
+                x={x}
+                y={baseline + 16}
+                textAnchor="middle"
+                style={{
+                  fontFamily: "Geist Mono, monospace",
+                  fontSize: 9,
+                  fill: colour,
+                }}
+              >
+                {lbl}
+              </text>
+            );
+          })}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="rounded-xl border border-dashed border-line bg-white px-8 py-16 text-center">
+      <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-line bg-paper2">
+        <svg width="16" height="16" viewBox="0 0 16 16">
+          <circle cx="8" cy="8" r="3" fill="#9AA098" />
+        </svg>
+      </div>
+      <h3 className="mt-3 text-[15px] font-semibold">No drafts in this filter</h3>
+      <p className="mx-auto mt-1 max-w-sm text-[13px] text-mute">
+        Trigger the agent to surface new churned users, or change the filter
+        to see ones already sent.
+      </p>
+    </div>
+  );
+}
+
+// ───────────────────────────── Engagement profile derivation
+// New agent rows include structured activity telemetry inside event_timeline.
+// Older rows fall back to deterministic synthesis from the user identity.
+
+type EngagementDay = {
+  sessions: number;
+  label?: string;
+  dormant?: boolean;
+};
+
+type EngagementProfile = {
+  seed: number;
+  onboardedDaysAgo: number;
+  dormantDays: number;
+  sessions: number;
+  minutes: number;
+  pageVisits: number;
+  activeDates: number;
+  days: EngagementDay[];
+};
+
+type EventPayload = {
+  events?: string;
+  engagement?: {
+    onboardedDaysAgo?: number;
+    dormantDays?: number;
+    sessions?: number;
+    minutes?: number;
+    pageVisits?: number;
+    activeDates?: number;
+    days?: {
+      day?: number;
+      sessions?: number;
+      label?: string;
+    }[];
+  };
+};
+
+function deriveEngagement(user: DetectedUser): EngagementProfile {
+  const seed = hashString(`${user.id}:${user.email ?? ""}:${user.detected_at ?? ""}`);
+  const payload = readEventPayload(user.event_timeline);
+  const provided = payload?.engagement;
+  if (provided) {
+    const onboardedDaysAgo = clampNumber(provided.onboardedDaysAgo, 9, 28, 14);
+    const dormantDays = clampNumber(
+      provided.dormantDays,
+      1,
+      Math.max(1, onboardedDaysAgo - 1),
+      9
+    );
+    const activeLimit = Math.max(1, onboardedDaysAgo - dormantDays);
+    const days: EngagementDay[] = Array.from({ length: onboardedDaysAgo }, () => ({
+      sessions: 0,
+    }));
+
+    const activeDots = (provided.days ?? [])
+      .map((dot) => ({
+        day: clampNumber(dot.day, 0, activeLimit - 1, 0),
+        sessions: clampNumber(dot.sessions, 1, 5, 1),
+        label: cleanTimelineLabel(dot.label),
+      }))
+      .filter((dot, index, arr) => arr.findIndex((x) => x.day === dot.day) === index)
+      .sort((a, b) => a.day - b.day);
+
+    const dots =
+      activeDots.length > 0
+        ? activeDots
+        : [
+            { day: 0, sessions: 1, label: "signup" },
+            { day: Math.min(2, activeLimit - 1), sessions: 2, label: "upload" },
+          ];
+
+    for (const dot of dots) {
+      days[dot.day].sessions = dot.sessions;
+      days[dot.day].label = dot.label;
+    }
+    for (let i = onboardedDaysAgo - dormantDays; i < onboardedDaysAgo; i++) {
+      if (i >= 0 && i < onboardedDaysAgo) days[i].dormant = true;
+    }
+
+    return {
+      seed,
+      onboardedDaysAgo,
+      dormantDays,
+      sessions: clampNumber(
+        provided.sessions,
+        1,
+        20,
+        dots.reduce((sum, dot) => sum + dot.sessions, 0)
+      ),
+      minutes: clampNumber(provided.minutes, 1, 240, 30),
+      pageVisits: clampNumber(provided.pageVisits, 1, 80, 12),
+      activeDates: clampNumber(provided.activeDates, 1, 10, dots.length),
+      days,
+    };
+  }
+
+  const dormantDays = 6 + (seed % 9);
+  const activeDates = 2 + (seed % 4);
+  const onboardedDaysAgo = dormantDays + activeDates + 3 + (seed % 8);
+  const sessions = activeDates + 1 + (seed % 5);
+  const pageVisits = activeDates + 4 + (seed % 12);
+  const minutes = 16 + (seed % 78);
+
+  const total = onboardedDaysAgo;
+  const days: EngagementDay[] = Array.from({ length: total }, () => ({ sessions: 0 }));
+
+  // Place activity in the active window (before dormant tail)
+  const activeWindow = Math.max(1, total - dormantDays - 1);
+  const eventLabels = ["signup", "upload", "editor", "stuck"];
+  for (let i = 0; i < activeDates; i++) {
+    const day = Math.min(
+      activeWindow - 1,
+      Math.floor((i / Math.max(1, activeDates - 1)) * activeWindow)
+    );
+    if (day < 0 || day >= total) continue;
+    days[day].sessions = 1 + ((seed >> (i * 2)) & 0x3);
+    days[day].label = eventLabels[Math.min(i, eventLabels.length - 1)];
+  }
+
+  // Mark dormant tail
+  for (let i = total - dormantDays; i < total; i++) {
+    if (i >= 0 && i < total) days[i].dormant = true;
+  }
+
+  return {
+    seed,
+    onboardedDaysAgo,
+    dormantDays,
+    sessions,
+    minutes,
+    pageVisits,
+    activeDates,
+    days,
+  };
+}
+
+function eventTimelineText(value: string | null): string {
+  const payload = readEventPayload(value);
+  return payload?.events?.trim() || value || "";
+}
+
+function readEventPayload(value: string | null): EventPayload | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as EventPayload;
+    if (parsed && typeof parsed === "object") return parsed;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function clampNumber(
+  value: number | undefined,
+  minimum: number,
+  maximum: number,
+  fallback: number
+): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.max(minimum, Math.min(maximum, Math.round(value)));
+}
+
+function cleanTimelineLabel(label: string | undefined): string {
+  return (label ?? "visit").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 12) || "visit";
+}
+
+function hashString(value: string): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
+// ───────────────────────────── Date utilities
+
+function fmtClock(s?: string) {
+  if (!s) return "—";
+  const d = new Date(s);
+  if (Number.isNaN(d.valueOf())) return s;
   return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
     hour: "numeric",
-    minute: "2-digit"
-  }).format(date);
+    minute: "2-digit",
+  }).format(d);
 }
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function relativeFromNow(s?: string | null) {
+  if (!s) return "—";
+  const t = new Date(s).valueOf();
+  if (Number.isNaN(t)) return "—";
+  const diff = (Date.now() - t) / 1000;
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.round(diff / 3600)}h ago`;
+  return `${Math.round(diff / 86400)}d ago`;
 }

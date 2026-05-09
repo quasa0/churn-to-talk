@@ -64,7 +64,7 @@ export async function listRunHistory(): Promise<RunHistoryItem[]> {
       FROM app_cache
       WHERE key LIKE 'run:%'
       ORDER BY key DESC
-      LIMIT 20
+      LIMIT 1000
     `,
     args: []
   });

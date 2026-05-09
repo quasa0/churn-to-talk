@@ -2,11 +2,15 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Churn Recovery Agent",
-  description: "Review and send founder-voice recovery emails for churned fastclip.it users."
+  title: "Recovery Desk · fastclip.it",
+  description: "Founder-reviewed churn recovery drafts.",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
       <body>{children}</body>

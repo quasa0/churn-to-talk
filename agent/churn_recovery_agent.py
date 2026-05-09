@@ -63,6 +63,20 @@ Common user friction:
 
 SECRETS = ["OPENAI_API_KEY", "NIA_API_KEY", "TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN"]
 
+SPONSOR_DOMAINS = [
+    "nozomio.com",
+    "ainexus.com",
+    "vercel.com",
+    "insforge.dev",
+    "reacher.ai",
+    "hyperspell.com",
+    "tensorlake.ai",
+    "convex.dev",
+    "aside.com",
+    "cognition.ai",
+    "openai.com",
+]
+
 if Image:
     agent_image = Image(name="python:3.11-slim").run("pip install requests")
 else:
@@ -280,12 +294,54 @@ def generate_mock_users(app_context: str) -> list[dict[str, Any]]:
                 "items": {
                     "type": "object",
                     "additionalProperties": False,
-                    "required": ["name", "email", "detection_reason", "event_timeline"],
+                    "required": [
+                        "name",
+                        "email",
+                        "detection_reason",
+                        "event_timeline",
+                        "engagement",
+                    ],
                     "properties": {
                         "name": {"type": "string"},
                         "email": {"type": "string"},
                         "detection_reason": {"type": "string"},
                         "event_timeline": {"type": "string"},
+                        "engagement": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": [
+                                "onboardedDaysAgo",
+                                "dormantDays",
+                                "sessions",
+                                "minutes",
+                                "pageVisits",
+                                "activeDates",
+                                "days",
+                            ],
+                            "properties": {
+                                "onboardedDaysAgo": {"type": "integer"},
+                                "dormantDays": {"type": "integer"},
+                                "sessions": {"type": "integer"},
+                                "minutes": {"type": "integer"},
+                                "pageVisits": {"type": "integer"},
+                                "activeDates": {"type": "integer"},
+                                "days": {
+                                    "type": "array",
+                                    "minItems": 2,
+                                    "maxItems": 6,
+                                    "items": {
+                                        "type": "object",
+                                        "additionalProperties": False,
+                                        "required": ["day", "sessions", "label"],
+                                        "properties": {
+                                            "day": {"type": "integer"},
+                                            "sessions": {"type": "integer"},
+                                            "label": {"type": "string"},
+                                        },
+                                    },
+                                },
+                            },
+                        },
                     },
                 },
             }
@@ -297,10 +353,102 @@ Generate {count} realistic fake churned fastclip.it users.
 App context from Nia:
 {app_context}
 
-Each user must be made up, B2C creator/prosumer, and include a specific sequence of app actions over 1-7 days.
-Detection reasons should be behavioral, such as returned but never exported, edited captions then abandoned, or uploaded multiple times but never reached download.
+Each user must be made up, B2C creator/prosumer, and include a specific sequence of app actions over multiple visits.
+Each email must use one of these hackathon sponsor domains exactly: {", ".join(SPONSOR_DOMAINS)}.
+Use realistic personal-looking work emails, for example first.last@vercel.com or first@tensorlake.ai. Do not use example.com, gmail.com, yahoo.com, outlook.com, or fastclip.it.
+
+Make the behavioral data feel like a real product analytics trace, not a generic CRM note:
+- event_timeline must be a compact action-token string like:
+  "signup • upload(Brave Convos #14, 47m) • generate_clips(8) • preview_clip • open_editor • timeline_drag(x6) • caption_edit(x4) • bounce • return(d3) • open_editor • export_failed • bounce • return(d5) • view_pricing • bounce"
+- Include concrete media/project details: podcast episode titles, webinar titles, creator niches, source length, batch counts, file sizes, or connected channels.
+- Good churn patterns: generated clips but exported zero, dragged trim handles repeatedly, changed caption style/aspect ratio then left, import failed silently twice, viewed billing after hitting free limit, connected YouTube and batch-generated many clips but never downloaded.
+- Detection reasons should be short behavioral phrases, e.g. "returned twice after generating 8 clips but never exported" or "2.3GB import failed twice, then 12 days dormant".
+
+Generate engagement metrics for the visual timeline:
+- onboardedDaysAgo: 9-21
+- dormantDays: 7-14, always less than onboardedDaysAgo
+- sessions: 2-8
+- minutes: 12-90
+- pageVisits: 6-32
+- activeDates: 2-5
+- days: only active-day dots, not every day. Each item day is zero-based from signup, must be less than onboardedDaysAgo - dormantDays, and labels should be short: signup, upload, import, batch, editor, captions, billing, fail, stuck, retry.
 """
-    return _openai_structured(prompt, schema)["users"]
+    users = _openai_structured(prompt, schema)["users"]
+    normalized = [normalize_sponsor_email(user, index) for index, user in enumerate(users)]
+    return [pack_event_timeline(user) for user in normalized]
+
+
+def pack_event_timeline(user: dict[str, Any]) -> dict[str, Any]:
+    timeline = str(user.get("event_timeline") or "").strip()
+    engagement = user.pop("engagement", None)
+    if not isinstance(engagement, dict):
+        return user
+
+    payload = {
+        "events": timeline,
+        "engagement": sanitize_engagement(engagement),
+    }
+    user["event_timeline"] = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    return user
+
+
+def sanitize_engagement(engagement: dict[str, Any]) -> dict[str, Any]:
+    onboarded = _clamp_int(engagement.get("onboardedDaysAgo"), 9, 21, 14)
+    dormant = _clamp_int(engagement.get("dormantDays"), 7, min(14, onboarded - 1), 9)
+    active_limit = max(1, onboarded - dormant)
+    raw_days = engagement.get("days") if isinstance(engagement.get("days"), list) else []
+    days = []
+    seen = set()
+    for item in raw_days:
+        if not isinstance(item, dict):
+            continue
+        day = _clamp_int(item.get("day"), 0, active_limit - 1, 0)
+        if day in seen:
+            continue
+        seen.add(day)
+        label = str(item.get("label") or "visit").strip().lower()[:12] or "visit"
+        sessions = _clamp_int(item.get("sessions"), 1, 4, 1)
+        days.append({"day": day, "sessions": sessions, "label": label})
+
+    if not days:
+        days = [
+            {"day": 0, "sessions": 1, "label": "signup"},
+            {"day": min(2, active_limit - 1), "sessions": 2, "label": "upload"},
+        ]
+    days.sort(key=lambda item: item["day"])
+
+    active_dates = _clamp_int(engagement.get("activeDates"), 2, 5, len(days))
+    active_dates = max(active_dates, len(days))
+    return {
+        "onboardedDaysAgo": onboarded,
+        "dormantDays": dormant,
+        "sessions": _clamp_int(engagement.get("sessions"), 2, 8, sum(day["sessions"] for day in days)),
+        "minutes": _clamp_int(engagement.get("minutes"), 12, 90, 30),
+        "pageVisits": _clamp_int(engagement.get("pageVisits"), 6, 32, 12),
+        "activeDates": active_dates,
+        "days": days[:6],
+    }
+
+
+def _clamp_int(value: Any, minimum: int, maximum: int, fallback: int) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        number = fallback
+    return max(minimum, min(maximum, number))
+
+
+def normalize_sponsor_email(user: dict[str, Any], index: int) -> dict[str, Any]:
+    email = str(user.get("email") or "").strip().lower()
+    domain = email.rsplit("@", 1)[-1] if "@" in email else ""
+    if domain in SPONSOR_DOMAINS:
+        return user
+
+    name = str(user.get("name") or f"user {index + 1}").strip().lower()
+    local = "".join(char if char.isalnum() else "." for char in name)
+    local = ".".join(part for part in local.split(".") if part) or f"user{index + 1}"
+    user["email"] = f"{local}@{SPONSOR_DOMAINS[index % len(SPONSOR_DOMAINS)]}"
+    return user
 
 
 def draft_messages(users: list[dict[str, Any]], app_context: str) -> list[dict[str, Any]]:
