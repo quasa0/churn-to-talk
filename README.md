@@ -1,13 +1,24 @@
 # Churn to Talk
 
-Hackathon build for a founder-reviewed churn recovery agent.
+Churn to Talk is an agent that continuously finds churned users who were interested in your product and helps founders talk to them with personalized recovery emails.
 
-The system has two pieces:
+![Churn to Talk command center](docs/churn-to-talk-command-center.png)
 
-- `agent/churn_recovery_agent.py`: Tensorlake Orchestrate Python app. It can be triggered manually over HTTP or scheduled every 3 minutes. Each run generates 1-3 realistic fake churned fastclip.it users, drafts founder-voice recovery emails, and writes everything to InsForge Postgres.
-- `src/app`: Next.js review UI. It lists detected users, lets the founder edit drafts, marks drafts as sent, shows run history, and includes a "Trigger Agent Now" button for demos.
+## Why
 
-Nia is enabled with `SKIP_NIA=0`. The agent first searches Nia shared context for `fastclip.it-copy context churn recovery`, then falls back to indexed source search if available.
+> "Half the advice I give to startups is some form of 'talk to your customers.'" — Paul Graham
+
+Founders know they should follow up with churned users, but doing it every day means digging through event logs, reconstructing what each person tried, understanding where they got stuck, and writing a non-generic message. Churn to Talk does that work automatically so the founder only has to review and send.
+
+## How It Works
+
+- **Tensorlake** runs the churn recovery agent on a 3-minute cron, with a manual trigger for demos.
+- **PostHog-style event timelines** identify users who showed intent and then dropped off.
+- **Nia** adds codebase and product workflow context so raw events become a likely churn reason.
+- **OpenAI** drafts short, founder-style recovery emails for each user.
+- **InsForge Postgres** stores detected users, run history, drafts, and state.
+- **Hyperspell** stores recurring churn patterns and product issues as memory.
+- **Next.js on Vercel** gives the founder a command center to review, edit, save, and send.
 
 ## Environment
 
