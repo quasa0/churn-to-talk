@@ -780,7 +780,12 @@ For each user, return:
 - email: same email as input
 - detection_reason: short "why churned" phrase grounded in the raw events and enriched by Nia context. Example: "export failed after 8 generated clips, then they returned only to check pricing"
 - activity_summary: one compact Nia-augmented paragraph describing the raw actions, relevant fastclip workflow/context, and where they likely got stuck. Do not invent events not in the raw timeline.
-- draft_message: 1-2 very short sentences only. This is the final OpenAI-written founder email. Write like a real busy founder texting a user, all lowercase, casual, slightly imperfect, no subject line, no greeting block, no signoff, no marketing language, no em dash. Mention one specific thing they did and ask one simple question. Example style: "hey, saw you got clips generated but never exported. did the editor feel annoying or was the clip quality just not there?"
+- draft_message: one short sentence only, 18 words max. This is the final OpenAI-written founder email.
+- Write like a real busy founder texting a user: lowercase, casual, slightly imperfect, no subject line, no greeting block, no signoff, no marketing language, no em dash.
+- Use only the clearest final churn reason from detection_reason. If export failed, ask only about export. If upload failed, ask only about upload. Do not combine multiple possible causes.
+- Ask one direct question with no "or", no two-option framing, and no stacked clauses.
+- Prefer concrete user-visible words over internal errors. Say "export timed out" instead of "ffmpeg_timeout".
+- Good examples: "hey, saw your clip got all the way to export then timed out. what happened on your end?" / "hey, saw the upload kept stalling around 20%. where did it get stuck for you?"
 """
     drafts = _openai_structured(prompt, schema)["drafts"]
     by_email = {draft["email"].lower(): draft for draft in drafts}
