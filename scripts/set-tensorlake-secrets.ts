@@ -5,6 +5,8 @@ loadDotEnv();
 
 const required = [
   "OPENAI_API_KEY",
+  "OPENAI_MODEL",
+  "OPENAI_REASONING_EFFORT",
   "NIA_API_KEY",
   "INSFORGE_DATABASE_URL",
   "SKIP_NIA",
@@ -13,6 +15,18 @@ const required = [
   "LOOPS_NOTIFY_EMAIL",
   "APP_BASE_URL"
 ];
+
+const defaults: Record<string, string> = {
+  OPENAI_MODEL: "gpt-5.5",
+  OPENAI_REASONING_EFFORT: "low"
+};
+
+for (const [key, value] of Object.entries(defaults)) {
+  if (!process.env[key]) {
+    process.env[key] = value;
+  }
+}
+
 const missing = required.filter((key) => !process.env[key]);
 
 if (!process.env.TENSORLAKE_API_KEY) {

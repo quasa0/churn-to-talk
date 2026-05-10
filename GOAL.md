@@ -2,7 +2,7 @@
 
 ## What it is
 
-An always-on background agent that runs every 3 minutes on Tensorlake. Each run, it uses an LLM to generate 1-3 realistic fake churned users of fastclip.it (a B2C web app that converts long-form video/podcasts into short-form clips), enriches the output with real app context from Nia (which has the fastclip.it codebase indexed), drafts personalized founder-voice recovery emails, and saves everything to Turso. A Next.js app on Vercel shows all detected users as cards with draft emails the founder can edit and send.
+An always-on background agent that runs every 5 minutes on Tensorlake. Each run, it uses an LLM to generate 1-3 realistic fake churned users of fastclip.it (a B2C web app that converts long-form video/podcasts into short-form clips), enriches the output with real app context from Nia (which has the fastclip.it codebase indexed), drafts personalized founder-voice recovery emails, and saves everything to Turso. A Next.js app on Vercel shows all detected users as cards with draft emails the founder can edit and send.
 
 There's also a manual trigger endpoint so I can fire the agent on-demand during the demo for judges.
 
@@ -10,11 +10,11 @@ There's also a manual trigger endpoint so I can fire the agent on-demand during 
 
 ```text
 Tensorlake Orchestrate (Python)
-  ├── Cron: every 3 min AND manual HTTP trigger for demo
+  ├── Cron: every 5 min AND manual HTTP trigger for demo
   └── churn_recovery_agent()
         ├── get_app_context()          — Nia API: search indexed fastclip.it codebase for feature descriptions
-        ├── generate_mock_users()      — OpenAI (cheap model): generate 1-3 realistic churned user profiles with event timelines
-        ├── draft_messages()           — OpenAI (cheap model): for each user, generate activity summary + founder-voice email
+        ├── generate_mock_users()      — OpenAI GPT-5.5 low reasoning: generate 1-3 realistic churned user profiles with event timelines
+        ├── draft_messages()           — OpenAI GPT-5.5 low reasoning: for each user, generate activity summary + founder-voice email
         └── save_to_db()              — write users + drafts to Turso
 
 Next.js on Vercel
@@ -28,7 +28,7 @@ Next.js on Vercel
 - **Tensorlake Orchestrate** — Python only (no TS for Orchestrate). Cron + HTTP trigger.
 - **Turso (libSQL)** — Durable state. Already have an account.
 - **Nia API** — Index fastclip.it codebase, query it for feature context during runs.
-- **OpenAI API** — gpt-4o-mini or cheapest available. Mock user generation + email drafting.
+- **OpenAI API** — GPT-5.5 with low reasoning. Mock user generation + email drafting.
 - **Next.js on Vercel** — Review UI. Deploy with `vercel` CLI.
 
 ## InsForge Postgres DB schema
@@ -121,7 +121,7 @@ Add OpenAI calls. Use the Nia context in the prompt. Generate 1-3 fake churned u
 
 ### Step 6: Cron + manual trigger
 
-Set up Tensorlake cron (every 3 min). Verify it fires. Also verify the HTTP endpoint still works for manual triggering during demo.
+Set up Tensorlake cron (every 5 min). Verify it fires. Also verify the HTTP endpoint still works for manual triggering during demo.
 
 ### Step 7: Next.js review UI
 
@@ -145,11 +145,11 @@ Simple app:
 3. Refresh — 1-3 new user cards appear with personalized draft emails
 4. Show that each email references specific things the user did (powered by Nia context about real fastclip.it features)
 5. Edit a draft slightly, click Send
-6. Show the cron schedule — "this runs every 3 minutes on its own, I just triggered it manually for the demo"
+6. Show the cron schedule — "this runs every 5 minutes on its own, I just triggered it manually for the demo"
 7. Show run history — previous runs logged with timestamps
 8. Explain: "In production, this queries PostHog instead of generating mock users. The rest is identical."
 
-**Pitch:** "Users try my app and disappear. This agent wakes up every 3 minutes, figures out what they did and where they got stuck, and drafts me a personal email. I review it, tweak if needed, hit send. The replies teach me what to fix. Right now it generates mock users — in production it reads real PostHog analytics."
+**Pitch:** "Users try my app and disappear. This agent wakes up every 5 minutes, figures out what they did and where they got stuck, and drafts me a personal email. I review it, tweak if needed, hit send. The replies teach me what to fix. Right now it generates mock users — in production it reads real PostHog analytics."
 
 ## Env vars
 

@@ -13,7 +13,7 @@
     "trigger:agent": "tsx scripts/trigger-agent.ts",
     "setup:tensorlake:secrets": "tsx scripts/set-tensorlake-secrets.ts",
     "deploy:tensorlake": "tsx scripts/tl.ts deploy agent/churn_recovery_agent.py",
-    "deploy:tensorlake:cron": "tsx scripts/tl.ts cron create --schedule \"*/3 * * * *\" churn_recovery_agent --input-json '{\"source\":\"cron\"}'",
+    "deploy:tensorlake:cron": "tsx scripts/tl.ts cron create --schedule \"*/5 * * * *\" churn_recovery_agent --input-json '{\"source\":\"cron\"}'",
     "deploy:vercel": "tsx scripts/deploy-vercel.ts"
   },
   "dependencies": {

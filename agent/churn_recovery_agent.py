@@ -384,7 +384,8 @@ def _openai_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError("OPENAI_API_KEY is required for generation")
 
     payload = {
-        "model": os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+        "model": os.environ.get("OPENAI_MODEL", "gpt-5.5"),
+        "reasoning_effort": os.environ.get("OPENAI_REASONING_EFFORT", "low"),
         "messages": [
             {
                 "role": "system",

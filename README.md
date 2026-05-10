@@ -12,7 +12,7 @@ Founders know they should follow up with churned users, but doing it every day m
 
 ## How It Works
 
-- **Tensorlake** runs the churn recovery agent on a 3-minute cron, with a manual trigger for demos.
+- **Tensorlake** runs the churn recovery agent on a 5-minute cron, with a manual trigger for demos.
 - **PostHog-style event timelines** identify users who showed intent and then dropped off.
 - **Nia** adds codebase and product workflow context so raw events become a likely churn reason.
 - **OpenAI** drafts short, founder-style recovery emails for each user.
@@ -26,6 +26,8 @@ Copy `.env.example` to `.env` and fill in:
 
 ```bash
 OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5.5
+OPENAI_REASONING_EFFORT=low
 NIA_API_KEY=
 FASTCLIP_REPO_URL=https://github.com/quasa0/fastclip.it-copy
 NIA_REPOSITORY=quasa0/fastclip.it-copy
@@ -66,7 +68,7 @@ npm run deploy:tensorlake
 npm run trigger:agent
 ```
 
-Create the 3-minute cron:
+Create the 5-minute cron:
 
 ```bash
 npm run deploy:tensorlake:cron
