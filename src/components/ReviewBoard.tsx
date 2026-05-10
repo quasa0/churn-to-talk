@@ -619,14 +619,30 @@ function RunHistory({ runs }: { runs: RunHistoryItem[] }) {
                     >
                       {fmtClock(r.ran_at)}
                     </span>
-                    <span
-                      className={clsx(
-                        "justify-self-end rounded px-1.5 py-0.5 text-right font-mono text-[9.5px] leading-tight tracking-[0.04em]",
-                        source.badge
-                      )}
-                    >
-                      {source.label}
-                    </span>
+                    {r.request_id ? (
+                      <a
+                        href={tensorlakeRequestUrl(r.request_id)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={clsx(
+                          "inline-flex items-center gap-1 justify-self-end rounded px-1.5 py-0.5 text-right font-mono text-[9.5px] leading-tight tracking-[0.04em] transition-transform hover:-translate-y-px",
+                          source.badge
+                        )}
+                        aria-label={`Open ${source.label} run in Tensorlake`}
+                      >
+                        {source.label}
+                        <ArrowRight size={10} strokeWidth={2.4} />
+                      </a>
+                    ) : (
+                      <span
+                        className={clsx(
+                          "justify-self-end rounded px-1.5 py-0.5 text-right font-mono text-[9.5px] leading-tight tracking-[0.04em]",
+                          source.badge
+                        )}
+                      >
+                        {source.label}
+                      </span>
+                    )}
                   </div>
                   <div className="mt-0.5 text-[12.5px] text-mute">
                     {r.status === "running" ? (
@@ -647,17 +663,6 @@ function RunHistory({ runs }: { runs: RunHistoryItem[] }) {
                       <span className="text-mute2">no signal</span>
                     )}
                   </div>
-                  {r.request_id ? (
-                    <a
-                      href={tensorlakeRequestUrl(r.request_id)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-1.5 inline-flex items-center gap-1.5 rounded border border-line bg-white px-1.5 py-0.5 font-mono text-[9.5px] text-mute transition-colors hover:border-moss hover:text-moss"
-                    >
-                      <TensorlakeMark />
-                      See in Tensorlake -&gt;
-                    </a>
-                  ) : null}
                 </div>
               </li>
             );
@@ -875,10 +880,10 @@ function UserRow({
                 {busy === "knowledge"
                   ? "Adding"
                   : knowledgeStatus === "saved"
-                  ? "Added to graph"
+                  ? "Saved to Hyperspell"
                   : knowledgeStatus === "error"
-                  ? "Retry graph add"
-                  : "Add to knowledge graph"}
+                  ? "Retry Hyperspell"
+                  : "Save to Hyperspell"}
               </button>
               <button
                 onClick={onSave}
@@ -1034,14 +1039,6 @@ function PostHogMark() {
     <span className="relative inline-flex h-4 w-4 items-center justify-center rounded-sm bg-[#F9BD2B] text-[9px] font-bold text-ink">
       <span className="absolute left-[3px] top-[3px] h-2 w-2 rounded-full border border-ink/80 bg-white" />
       <span className="absolute bottom-[3px] right-[3px] h-1.5 w-1.5 rounded-full bg-ink" />
-    </span>
-  );
-}
-
-function TensorlakeMark() {
-  return (
-    <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-sm bg-moss font-mono text-[7px] font-semibold leading-none text-white">
-      tl
     </span>
   );
 }
@@ -1536,7 +1533,7 @@ function fmtElapsed(s?: string, now = Date.now()) {
 function tensorlakeRequestUrl(requestId: string) {
   return `https://cloud.tensorlake.ai/organizations/org_bcMW6MbrTm9hmnnzmQcKG/projects/project_zzkDgDhtgNBWpkNJNznmk/applications/churn_recovery_agent/requests/${encodeURIComponent(
     requestId
-  )}?tab=logs`;
+  )}`;
 }
 
 function relativeFromNow(s?: string | null) {
