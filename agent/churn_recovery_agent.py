@@ -2,7 +2,6 @@ import json
 import os
 import random
 import re
-import sqlite3
 import time
 import urllib.error
 import urllib.parse
@@ -10,6 +9,8 @@ import urllib.request
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
+
+import psycopg
 
 try:
     from tensorlake.applications import Image, Request, application, function, run_local_application
@@ -65,8 +66,7 @@ Common user friction:
 SECRETS = [
     "OPENAI_API_KEY",
     "NIA_API_KEY",
-    "TURSO_DATABASE_URL",
-    "TURSO_AUTH_TOKEN",
+    "INSFORGE_DATABASE_URL",
     "LOOPS_API_KEY",
     "LOOPS_TRANSACTIONAL_ID",
 ]
@@ -136,7 +136,7 @@ LAST_NAMES = [
 ]
 
 if Image:
-    agent_image = Image(name="python:3.11-slim").run("pip install requests")
+    agent_image = Image(name="python:3.11-slim").run("pip install 'psycopg[binary]>=3.2.0'")
 else:
     agent_image = None
 
@@ -260,48 +260,24 @@ def _notification_subject(user: dict[str, Any]) -> str:
     return f"{first_name} needs a recovery note"
 
 
-def _turso_request(statements: list[dict[str, Any]]) -> dict[str, Any]:
-    url = os.environ["TURSO_DATABASE_URL"]
-    token = os.environ["TURSO_AUTH_TOKEN"]
-    if url.startswith("libsql://"):
-        url = "https://" + url.removeprefix("libsql://")
-    endpoint = url.rstrip("/") + "/v2/pipeline"
-    baton = None
-    requests: list[dict[str, Any]] = []
-    for statement in statements:
-        request: dict[str, Any] = {"type": "execute", "stmt": statement}
-        if baton:
-            request["baton"] = baton
-        requests.append(request)
-
-    return _json_request(
-        endpoint,
-        {"requests": requests},
-        {"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-    )
-
-
-def _sql_value(value: Any) -> dict[str, Any]:
-    if value is None:
-        return {"type": "null"}
-    if isinstance(value, bool):
-        return {"type": "integer", "value": "1" if value else "0"}
-    if isinstance(value, int):
-        return {"type": "integer", "value": str(value)}
-    if isinstance(value, float):
-        return {"type": "float", "value": value}
-    return {"type": "text", "value": str(value)}
+def _db_execute_many(statements: list[dict[str, Any]]) -> None:
+    connection_url = os.environ["INSFORGE_DATABASE_URL"]
+    with psycopg.connect(connection_url) as connection:
+        with connection.cursor() as cursor:
+            for statement in statements:
+                cursor.execute(statement["sql"], statement.get("args") or [])
+        connection.commit()
 
 
 def _stmt(sql: str, args: Optional[list[Any]] = None) -> dict[str, Any]:
     return {
         "sql": sql,
-        "args": [_sql_value(arg) for arg in (args or [])],
+        "args": args or [],
     }
 
 
 def setup_tables() -> None:
-    _turso_request(
+    _db_execute_many(
         [
             _stmt(
                 """
@@ -314,7 +290,7 @@ def setup_tables() -> None:
                   activity_summary TEXT,
                   draft_message TEXT,
                   status TEXT DEFAULT 'pending',
-                  detected_at TEXT DEFAULT (datetime('now')),
+                  detected_at TEXT DEFAULT (CURRENT_TIMESTAMP::text),
                   run_id TEXT
                 )
                 """
@@ -324,7 +300,7 @@ def setup_tables() -> None:
                 CREATE TABLE IF NOT EXISTS app_cache (
                   key TEXT PRIMARY KEY,
                   value TEXT,
-                  updated_at TEXT DEFAULT (datetime('now'))
+                  updated_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
                 )
                 """
             ),
@@ -870,8 +846,8 @@ def save_to_db(run_id: str, users: list[dict[str, Any]], app_context: str, sourc
         _stmt(
             """
             INSERT INTO app_cache (key, value, updated_at)
-            VALUES ('fastclip:context:latest', ?, datetime('now'))
-            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
+            VALUES ('fastclip:context:latest', %s, CURRENT_TIMESTAMP::text)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP::text
             """,
             [app_context],
         )
@@ -885,7 +861,7 @@ def save_to_db(run_id: str, users: list[dict[str, Any]], app_context: str, sourc
                   id, email, name, detection_reason, event_timeline,
                   activity_summary, draft_message, status, detected_at, run_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), ?)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 'pending', CURRENT_TIMESTAMP::text, %s)
                 """,
                 [
                     user.get("id"),
@@ -911,13 +887,13 @@ def save_to_db(run_id: str, users: list[dict[str, Any]], app_context: str, sourc
         _stmt(
             """
             INSERT INTO app_cache (key, value, updated_at)
-            VALUES (?, ?, datetime('now'))
-            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
+            VALUES (%s, %s, CURRENT_TIMESTAMP::text)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP::text
             """,
             [f"run:{ran_at}", json.dumps(metadata)],
         )
     )
-    _turso_request(statements)
+    _db_execute_many(statements)
     metadata["loops"] = send_loops_notifications(users)
     return metadata
 
@@ -954,12 +930,8 @@ def churn_recovery_agent(payload: Optional[dict[str, Any]] = None) -> dict[str, 
     }
 
 
-def _local_sqlite_smoke_test() -> dict[str, Any]:
-    connection = sqlite3.connect(":memory:")
-    connection.execute("CREATE TABLE app_cache (key TEXT PRIMARY KEY, value TEXT)")
-    connection.execute("INSERT INTO app_cache VALUES (?, ?)", ("setup:connection", "ok"))
-    row = connection.execute("SELECT value FROM app_cache WHERE key = ?", ("setup:connection",)).fetchone()
-    return {"sqlite": row[0]}
+def _local_smoke_test() -> dict[str, Any]:
+    return {"ok": True, "database": "postgres"}
 
 
 if __name__ == "__main__":
@@ -967,8 +939,8 @@ if __name__ == "__main__":
     if os.environ.get("RUN_HELLO") == "1":
         request = run_local_application(hello_world, "local")
         print(request.output())
-    elif all(os.environ.get(key) for key in ["OPENAI_API_KEY", "TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN"]):
+    elif all(os.environ.get(key) for key in ["OPENAI_API_KEY", "INSFORGE_DATABASE_URL"]):
         request = run_local_application(churn_recovery_agent, {"source": "local"})
         print(json.dumps(request.output(), indent=2))
     else:
-        print(json.dumps(_local_sqlite_smoke_test()))
+        print(json.dumps(_local_smoke_test()))

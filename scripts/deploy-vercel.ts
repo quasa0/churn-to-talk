@@ -4,8 +4,7 @@ import { loadDotEnv } from "./env";
 loadDotEnv();
 
 const required = [
-  "TURSO_DATABASE_URL",
-  "TURSO_AUTH_TOKEN",
+  "INSFORGE_DATABASE_URL",
   "TENSORLAKE_AGENT_URL",
   "TENSORLAKE_API_KEY",
   "APP_BASE_URL",
@@ -19,7 +18,7 @@ if (missing.length > 0) {
 }
 
 const envArgs = required.flatMap((key) => ["--env", `${key}=${process.env[key]}`]);
-const buildEnvArgs = ["TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN"].flatMap((key) => [
+const buildEnvArgs = ["INSFORGE_DATABASE_URL"].flatMap((key) => [
   "--build-env",
   `${key}=${process.env[key]}`
 ]);

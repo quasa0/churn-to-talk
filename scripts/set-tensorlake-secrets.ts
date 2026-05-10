@@ -6,8 +6,7 @@ loadDotEnv();
 const required = [
   "OPENAI_API_KEY",
   "NIA_API_KEY",
-  "TURSO_DATABASE_URL",
-  "TURSO_AUTH_TOKEN",
+  "INSFORGE_DATABASE_URL",
   "SKIP_NIA",
   "LOOPS_API_KEY",
   "LOOPS_TRANSACTIONAL_ID",

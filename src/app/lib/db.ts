@@ -1,33 +1,40 @@
-import { createClient, type Client } from "@libsql/client";
+import { Pool, type QueryResultRow } from "pg";
 import type { DetectedUser, RunHistoryItem } from "./types";
 
-let client: Client | null = null;
+let pool: Pool | null = null;
 
-export function getDb(): Client {
-  if (client) return client;
+export function getDb(): Pool {
+  if (pool) return pool;
 
-  const url = process.env.TURSO_DATABASE_URL;
-  const authToken = process.env.TURSO_AUTH_TOKEN;
+  const connectionString = process.env.INSFORGE_DATABASE_URL;
 
-  if (!url || !authToken) {
-    throw new Error("Missing TURSO_DATABASE_URL or TURSO_AUTH_TOKEN");
+  if (!connectionString) {
+    throw new Error("Missing INSFORGE_DATABASE_URL");
   }
 
-  client = createClient({ url, authToken });
-  return client;
+  const connectionUrl = new URL(connectionString);
+  const requiresSsl = connectionUrl.searchParams.get("sslmode") === "require";
+  connectionUrl.searchParams.delete("sslmode");
+
+  pool = new Pool({
+    connectionString: connectionUrl.toString(),
+    ssl: requiresSsl ? { rejectUnauthorized: false } : undefined
+  });
+  return pool;
+}
+
+async function query<T extends QueryResultRow = QueryResultRow>(text: string, values: unknown[] = []) {
+  return getDb().query<T>(text, values);
 }
 
 export async function listDetectedUsers(): Promise<DetectedUser[]> {
-  const result = await getDb().execute({
-    sql: `
+  const result = await query(`
       SELECT id, email, name, detection_reason, event_timeline, activity_summary,
              draft_message, status, detected_at, run_id
       FROM detected_users
-      ORDER BY datetime(detected_at) DESC, id DESC
+      ORDER BY detected_at::timestamptz DESC, id DESC
       LIMIT 100
-    `,
-    args: []
-  });
+    `);
 
   return result.rows.map((row) => ({
     id: String(row.id),
@@ -44,16 +51,16 @@ export async function listDetectedUsers(): Promise<DetectedUser[]> {
 }
 
 export async function getDetectedUser(id: string): Promise<DetectedUser | null> {
-  const result = await getDb().execute({
-    sql: `
+  const result = await query(
+    `
       SELECT id, email, name, detection_reason, event_timeline, activity_summary,
              draft_message, status, detected_at, run_id
       FROM detected_users
-      WHERE id = ?
+      WHERE id = $1
       LIMIT 1
     `,
-    args: [id]
-  });
+    [id]
+  );
 
   const row = result.rows[0];
   if (!row) return null;
@@ -73,17 +80,11 @@ export async function getDetectedUser(id: string): Promise<DetectedUser | null> 
 }
 
 export async function updateDraft(id: string, draftMessage: string): Promise<void> {
-  await getDb().execute({
-    sql: "UPDATE detected_users SET draft_message = ? WHERE id = ?",
-    args: [draftMessage, id]
-  });
+  await query("UPDATE detected_users SET draft_message = $1 WHERE id = $2", [draftMessage, id]);
 }
 
 export async function markSent(id: string): Promise<void> {
-  await getDb().execute({
-    sql: "UPDATE detected_users SET status = 'sent' WHERE id = ?",
-    args: [id]
-  });
+  await query("UPDATE detected_users SET status = 'sent' WHERE id = $1", [id]);
 }
 
 export async function createPendingRun(requestId: string, source = "vercel-ui"): Promise<RunHistoryItem> {
@@ -97,27 +98,27 @@ export async function createPendingRun(requestId: string, source = "vercel-ui"):
     source
   };
 
-  await getDb().execute({
-    sql: `
+  await query(
+    `
       INSERT INTO app_cache (key, value, updated_at)
-      VALUES (?, ?, datetime('now'))
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
+      VALUES ($1, $2, CURRENT_TIMESTAMP::text)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP::text
     `,
-    args: [item.key, JSON.stringify(item)]
-  });
+    [item.key, JSON.stringify(item)]
+  );
 
   return item;
 }
 
 export async function completePendingRun(requestId: string, output: unknown): Promise<void> {
   const completedAt = new Date().toISOString();
-  await getDb().execute({
-    sql: `
+  await query(
+    `
       UPDATE app_cache
-      SET value = ?, updated_at = datetime('now')
-      WHERE key = ?
+      SET value = $1, updated_at = CURRENT_TIMESTAMP::text
+      WHERE key = $2
     `,
-    args: [
+    [
       JSON.stringify({
         request_id: requestId,
         status: "complete",
@@ -126,33 +127,33 @@ export async function completePendingRun(requestId: string, output: unknown): Pr
       }),
       `run-pending:${requestId}`
     ]
-  });
+  );
 
   if (output && typeof output === "object" && !Array.isArray(output)) {
     const run = output as RunHistoryItem;
     if (run.ran_at) {
-      await getDb().execute({
-        sql: `
+      await query(
+        `
           INSERT INTO app_cache (key, value, updated_at)
-          VALUES (?, ?, datetime('now'))
+          VALUES ($1, $2, CURRENT_TIMESTAMP::text)
           ON CONFLICT(key) DO UPDATE SET
-            value = json_set(app_cache.value, '$.request_id', ?),
-            updated_at = datetime('now')
+            value = excluded.value,
+            updated_at = CURRENT_TIMESTAMP::text
         `,
-        args: [`run:${run.ran_at}`, JSON.stringify({ ...run, request_id: requestId }), requestId]
-      });
+        [`run:${run.ran_at}`, JSON.stringify({ ...run, request_id: requestId })]
+      );
     }
   }
 }
 
 export async function failPendingRun(requestId: string, error: string): Promise<void> {
-  await getDb().execute({
-    sql: `
+  await query(
+    `
       UPDATE app_cache
-      SET value = ?, updated_at = datetime('now')
-      WHERE key = ?
+      SET value = $1, updated_at = CURRENT_TIMESTAMP::text
+      WHERE key = $2
     `,
-    args: [
+    [
       JSON.stringify({
         request_id: requestId,
         ran_at: new Date().toISOString(),
@@ -163,20 +164,17 @@ export async function failPendingRun(requestId: string, error: string): Promise<
       }),
       `run-pending:${requestId}`
     ]
-  });
+  );
 }
 
 export async function listRunHistory(): Promise<RunHistoryItem[]> {
-  const result = await getDb().execute({
-    sql: `
+  const result = await query(`
       SELECT key, value
       FROM app_cache
       WHERE key LIKE 'run:%' OR key LIKE 'run-pending:%'
-      ORDER BY datetime(updated_at) DESC, key DESC
+      ORDER BY updated_at::timestamptz DESC, key DESC
       LIMIT 1000
-    `,
-    args: []
-  });
+    `);
 
   const parsedRows = result.rows.map((row) => {
     const key = String(row.key);
