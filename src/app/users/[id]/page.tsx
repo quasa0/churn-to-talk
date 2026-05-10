@@ -65,7 +65,7 @@ function TopBar() {
           <Logo />
           <div className="flex flex-wrap items-center gap-2.5">
             <span className="text-[14px] font-semibold tracking-tight sm:text-[15px]">
-              Churn → to → Talk | Command Center
+              Churn → Talk | Command Center
             </span>
             <span className="hidden h-4 w-px bg-line sm:block" />
             <span className="rounded-md border border-line bg-white px-2 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-mute">
