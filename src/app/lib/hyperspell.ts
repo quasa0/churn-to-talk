@@ -38,7 +38,7 @@ export async function addDetectedUserToHyperspell(user: DetectedUser): Promise<H
       resource_id: resourceId,
       collection: process.env.HYPERSPELL_COLLECTION || "churn-to-talk",
       title,
-      date: user.detected_at || new Date().toISOString(),
+      date: hyperspellDate(user.detected_at),
       text: renderDetectedUserMemory(user, userUrl),
       metadata: {
         app: "churn-to-talk",
@@ -90,6 +90,19 @@ function renderDetectedUserMemory(user: DetectedUser, userUrl: string) {
     "Founder recovery draft:",
     user.draft_message || "No draft recorded.",
   ].join("\n");
+}
+
+function hyperspellDate(value: string | null) {
+  if (!value) return new Date().toISOString();
+
+  const normalized = value
+    .trim()
+    .replace(" ", "T")
+    .replace(/(\.\d{3})\d+/, "$1")
+    .replace(/([+-]\d{2})$/, "$1:00");
+
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
 }
 
 function eventTimelineText(value: string | null) {
