@@ -166,11 +166,15 @@ def _json_request(
 ) -> Any:
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     request = urllib.request.Request(url, data=data, headers=headers, method=method)
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        body = response.read().decode("utf-8")
-        if not body:
-            return {}
-        return json.loads(body)
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            body = response.read().decode("utf-8")
+            if not body:
+                return {}
+            return json.loads(body)
+    except urllib.error.HTTPError as error:
+        body = error.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"HTTP {error.code} from {url}: {body[:1200]}") from error
 
 
 def _display_timeline(value: Any) -> str:
@@ -383,8 +387,9 @@ def _openai_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is required for generation")
 
+    model = os.environ.get("OPENAI_MODEL", "gpt-5.5")
     payload = {
-        "model": os.environ.get("OPENAI_MODEL", "gpt-5.5"),
+        "model": model,
         "reasoning_effort": os.environ.get("OPENAI_REASONING_EFFORT", "low"),
         "messages": [
             {
@@ -401,8 +406,9 @@ def _openai_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
                 "strict": True,
             },
         },
-        "temperature": 0.9,
     }
+    if not model.startswith("gpt-5"):
+        payload["temperature"] = 0.9
     data = _json_request(
         "https://api.openai.com/v1/chat/completions",
         payload,
