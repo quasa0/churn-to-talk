@@ -39,7 +39,6 @@ export function ReviewBoard({ initialUsers, initialRuns }: Props) {
   const [filter, setFilter] = useState<FilterId>("pending");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [highlightedUserId, setHighlightedUserId] = useState<string | null>(null);
-  const [autoSendAttempted, setAutoSendAttempted] = useState(false);
   const pollingRuns = useRef<Set<string>>(new Set());
 
   const pendingCount = useMemo(
@@ -90,7 +89,6 @@ export function ReviewBoard({ initialUsers, initialRuns }: Props) {
     setFilter(nextFilter);
     setSelectedUserId(null);
     setHighlightedUserId(null);
-    setAutoSendAttempted(false);
     if (window.location.search.includes("sendTo=")) {
       window.history.replaceState(null, "", window.location.pathname);
     }
@@ -274,18 +272,6 @@ export function ReviewBoard({ initialUsers, initialRuns }: Props) {
       }
     }
   }, [pollRun, runs]);
-
-  useEffect(() => {
-    if (!selectedUserId || autoSendAttempted) return;
-    const selected = users.find((u) => u.id === selectedUserId);
-    if (!selected) return;
-    setAutoSendAttempted(true);
-    if (selected.status !== "sent") {
-      window.setTimeout(() => {
-        void send(selectedUserId);
-      }, 500);
-    }
-  }, [selectedUserId, autoSendAttempted, users]);
 
   return (
     <div className="min-h-screen bg-paper text-ink">
