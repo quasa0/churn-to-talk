@@ -191,6 +191,62 @@ def _first_name(name: Any) -> str:
     return value.split()[0] if value else "there"
 
 
+def _subject_name(user: dict[str, Any]) -> str:
+    name = str(user.get("name") or "").strip()
+    parts = name.split()
+    if len(parts) >= 2:
+        return f"{parts[0]} {parts[-1]}"
+    if parts:
+        return parts[0]
+
+    email = str(user.get("email") or "").strip()
+    local_part = email.split("@", 1)[0].replace(".", " ").replace("_", " ").replace("-", " ")
+    email_parts = [part for part in local_part.split() if part]
+    if len(email_parts) >= 2:
+        return f"{email_parts[0].title()} {email_parts[-1].title()}"
+    if email_parts:
+        return email_parts[0].title()
+    return "Someone"
+
+
+def _subject_detail(user: dict[str, Any]) -> str:
+    candidates = [
+        user.get("detection_reason"),
+        user.get("activity_summary"),
+        _display_timeline(user.get("event_timeline")),
+    ]
+    for candidate in candidates:
+        detail = " ".join(str(candidate or "").replace("\n", " ").split())
+        if not detail or detail.lower() == "no events":
+            continue
+
+        first_sentence = detail.split(". ", 1)[0].strip(" .")
+        if first_sentence:
+            return _trim_subject_detail(first_sentence)
+    return "needs a recovery note"
+
+
+def _trim_subject_detail(detail: str, limit: int = 92) -> str:
+    cleaned = detail
+    for prefix in (
+        "why churned:",
+        "why detected:",
+        "detected because",
+        "the user",
+        "user",
+        "customer",
+    ):
+        if cleaned.lower().startswith(prefix):
+            cleaned = cleaned[len(prefix):].lstrip(" :-")
+            break
+
+    if len(cleaned) <= limit:
+        return cleaned
+
+    clipped = cleaned[:limit].rsplit(" ", 1)[0].rstrip(" ,;:")
+    return clipped or cleaned[:limit].rstrip(" ,;:")
+
+
 def _email_local_part(name: str) -> str:
     local = ".".join(name.lower().split())
     return "".join(char if char.isalnum() or char == "." else "" for char in local).strip(".")
@@ -210,54 +266,9 @@ def _sample_identities(count: int) -> list[dict[str, str]]:
 
 
 def _notification_subject(user: dict[str, Any]) -> str:
-    first_name = _first_name(user.get("name"))
-    reason = str(user.get("detection_reason") or "").lower()
-    timeline = _display_timeline(user.get("event_timeline")).lower()
-    combined = f"{reason} {timeline}"
-
-    subject_rules = [
-        (("import", "fail"), f"{first_name}'s import failed twice"),
-        (("upload", "stuck"), f"{first_name} got stuck uploading"),
-        (("processing", "slow"), f"{first_name} waited too long for processing"),
-        (("transcript", "bad"), f"{first_name} got a messy transcript"),
-        (("transcript", "edit"), f"{first_name} stalled fixing the transcript"),
-        (("generate", "zero"), f"{first_name} generated zero usable clips"),
-        (("clip", "quality"), f"{first_name} did not trust the clip quality"),
-        (("hook", "edit"), f"{first_name} kept rewriting hooks"),
-        (("caption", "style"), f"{first_name} could not settle on captions"),
-        (("caption", "edit"), f"{first_name} got stuck editing captions"),
-        (("aspect", "ratio"), f"{first_name} bounced on aspect ratios"),
-        (("timeline_drag",), f"{first_name} fought the trim handles"),
-        (("editor", "confusing"), f"{first_name} found the editor confusing"),
-        (("export", "failed"), f"{first_name}'s export failed"),
-        (("export", "never"), f"{first_name} never exported a clip"),
-        (("download", "never"), f"{first_name} never downloaded their clips"),
-        (("watermark",), f"{first_name} hit watermark friction"),
-        (("free limit",), f"{first_name} hit the free limit"),
-        (("pricing",), f"{first_name} hit pricing friction"),
-        (("billing",), f"{first_name} checked billing and bounced"),
-        (("youtube", "connect"), f"{first_name} connected YouTube then stalled"),
-        (("batch",), f"{first_name} batch-generated clips but left"),
-        (("team", "invite"), f"{first_name} invited a teammate then vanished"),
-        (("template",), f"{first_name} got stuck choosing a template"),
-        (("brand", "kit"), f"{first_name} stalled on brand setup"),
-        (("thumbnail",), f"{first_name} abandoned thumbnail tweaks"),
-        (("preview", "bounce"), f"{first_name} bounced after previewing"),
-        (("return", "bounce"), f"{first_name} came back and bounced again"),
-        (("dormant",), f"{first_name} went dormant after setup"),
-        (("mobile",), f"{first_name} struggled on mobile"),
-        (("large", "file"), f"{first_name} hit a large-file wall"),
-        (("podcast", "rss"), f"{first_name} could not finish podcast import"),
-    ]
-    for keywords, subject in subject_rules:
-        if all(keyword in combined for keyword in keywords):
-            return subject
-
-    if "export" in combined:
-        return f"{first_name} never exported a clip"
-    if "editor" in combined or "trim" in combined:
-        return f"{first_name} got stuck in the editor"
-    return f"{first_name} needs a recovery note"
+    subject_name = _subject_name(user)
+    detail = _subject_detail(user)
+    return f"{subject_name}: {detail}"
 
 
 def _db_execute_many(statements: list[dict[str, Any]]) -> None:
