@@ -46,7 +46,7 @@ export async function addDetectedUserToHyperspell(user: DetectedUser): Promise<H
         user_email: user.email || "",
         user_name: user.name || "",
         run_id: user.run_id || "",
-        status: user.status || "",
+        churn_status: user.status || "",
         detected_at: user.detected_at || "",
         link: userUrl,
         churn_reason: user.detection_reason || "",

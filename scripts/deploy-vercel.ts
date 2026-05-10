@@ -3,7 +3,16 @@ import { loadDotEnv } from "./env";
 
 loadDotEnv();
 
-const required = ["TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN", "TENSORLAKE_AGENT_URL", "TENSORLAKE_API_KEY"];
+const required = [
+  "TURSO_DATABASE_URL",
+  "TURSO_AUTH_TOKEN",
+  "TENSORLAKE_AGENT_URL",
+  "TENSORLAKE_API_KEY",
+  "APP_BASE_URL",
+  "HYPERSPELL_API_KEY",
+  "HYPERSPELL_USER_ID",
+  "HYPERSPELL_COLLECTION",
+];
 const missing = required.filter((key) => !process.env[key]);
 if (missing.length > 0) {
   throw new Error(`Missing required env vars: ${missing.join(", ")}`);

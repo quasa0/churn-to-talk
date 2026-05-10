@@ -25,6 +25,7 @@ type Props = {
 };
 
 type FilterId = "pending" | "sent" | "all";
+type KnowledgeStatus = "idle" | "saved" | "error";
 
 export function ReviewBoard({ initialUsers, initialRuns }: Props) {
   const [users, setUsers] = useState<DetectedUser[]>(initialUsers);
@@ -34,6 +35,7 @@ export function ReviewBoard({ initialUsers, initialRuns }: Props) {
   );
   const [topBusy, setTopBusy] = useState<"refresh" | "trigger" | null>(null);
   const [rowBusy, setRowBusy] = useState<Record<string, "save" | "send" | "knowledge">>({});
+  const [knowledgeStatus, setKnowledgeStatus] = useState<Record<string, KnowledgeStatus>>({});
   const [filter, setFilter] = useState<FilterId>("pending");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [highlightedUserId, setHighlightedUserId] = useState<string | null>(null);
@@ -210,12 +212,31 @@ export function ReviewBoard({ initialUsers, initialRuns }: Props) {
 
   async function addToKnowledgeGraph(userId: string) {
     setRowBusy((current) => ({ ...current, [userId]: "knowledge" }));
+    setKnowledgeStatus((current) => ({ ...current, [userId]: "idle" }));
     try {
+      const user = users.find((item) => item.id === userId);
+      const draft = drafts[userId] ?? "";
+      if (user && draft !== (user.draft_message ?? "")) {
+        await fetch(`/api/detected-users/${userId}/draft`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ draft_message: draft }),
+        });
+        setUsers((curr) =>
+          curr.map((item) =>
+            item.id === userId ? { ...item, draft_message: draft } : item
+          )
+        );
+      }
+
       const response = await fetch(`/api/detected-users/${userId}/knowledge`, { method: "POST" });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
         throw new Error(payload.error || "Hyperspell write failed");
       }
+      setKnowledgeStatus((current) => ({ ...current, [userId]: "saved" }));
+    } catch {
+      setKnowledgeStatus((current) => ({ ...current, [userId]: "error" }));
     } finally {
       setRowBusy((current) => {
         const next = { ...current };
@@ -381,13 +402,15 @@ export function ReviewBoard({ initialUsers, initialRuns }: Props) {
                     key={user.id}
                     user={user}
                     draft={drafts[user.id] ?? ""}
-                    onDraftChange={(v) =>
-                      setDrafts((c) => ({ ...c, [user.id]: v }))
-                    }
+                    onDraftChange={(v) => {
+                      setDrafts((c) => ({ ...c, [user.id]: v }));
+                      setKnowledgeStatus((current) => ({ ...current, [user.id]: "idle" }));
+                    }}
                     onSave={() => saveDraft(user.id)}
                     onSend={() => send(user.id)}
                     onAddToKnowledgeGraph={() => addToKnowledgeGraph(user.id)}
                     busy={rowBusy[user.id] ?? null}
+                    knowledgeStatus={knowledgeStatus[user.id] ?? "idle"}
                     highlighted={highlightedUserId === user.id}
                   />
                 ))
@@ -711,6 +734,7 @@ function UserRow({
   onSend,
   onAddToKnowledgeGraph,
   busy,
+  knowledgeStatus,
   highlighted,
   showDetailsLink = true,
 }: {
@@ -721,6 +745,7 @@ function UserRow({
   onSend: () => void;
   onAddToKnowledgeGraph: () => void;
   busy: string | null;
+  knowledgeStatus: KnowledgeStatus;
   highlighted: boolean;
   showDetailsLink?: boolean;
 }) {
@@ -831,14 +856,29 @@ function UserRow({
               <button
                 onClick={onAddToKnowledgeGraph}
                 disabled={busy !== null}
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-line bg-white px-3 text-[12px] font-medium text-ink transition-colors hover:bg-paper2 disabled:opacity-50"
+                className={clsx(
+                  "inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-[12px] font-medium transition-colors disabled:opacity-50",
+                  knowledgeStatus === "saved"
+                    ? "border-moss/25 bg-mossSoft text-moss hover:bg-mossSoft"
+                    : knowledgeStatus === "error"
+                    ? "border-amber/25 bg-amberSoft text-amber hover:bg-amberSoft"
+                    : "border-line bg-white text-ink hover:bg-paper2"
+                )}
               >
                 {busy === "knowledge" ? (
                   <Loader2 size={13} className="animate-spin" />
+                ) : knowledgeStatus === "saved" ? (
+                  <Check size={13} />
                 ) : (
                   <DatabaseZap size={13} />
                 )}
-                Add to knowledge graph
+                {busy === "knowledge"
+                  ? "Adding"
+                  : knowledgeStatus === "saved"
+                  ? "Added to graph"
+                  : knowledgeStatus === "error"
+                  ? "Retry graph add"
+                  : "Add to knowledge graph"}
               </button>
               <button
                 onClick={onSave}
@@ -881,6 +921,7 @@ export function FocusedUserCard({ user }: { user: DetectedUser }) {
   const [draft, setDraft] = useState(user.draft_message ?? "");
   const [currentUser, setCurrentUser] = useState(user);
   const [busy, setBusy] = useState<"save" | "send" | "knowledge" | null>(null);
+  const [knowledgeStatus, setKnowledgeStatus] = useState<KnowledgeStatus>("idle");
 
   async function saveDraft() {
     setBusy("save");
@@ -908,12 +949,25 @@ export function FocusedUserCard({ user }: { user: DetectedUser }) {
 
   async function addToKnowledgeGraph() {
     setBusy("knowledge");
+    setKnowledgeStatus("idle");
     try {
+      if (draft !== (currentUser.draft_message ?? "")) {
+        await fetch(`/api/detected-users/${user.id}/draft`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ draft_message: draft }),
+        });
+        setCurrentUser((curr) => ({ ...curr, draft_message: draft }));
+      }
+
       const response = await fetch(`/api/detected-users/${user.id}/knowledge`, { method: "POST" });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
         throw new Error(payload.error || "Hyperspell write failed");
       }
+      setKnowledgeStatus("saved");
+    } catch {
+      setKnowledgeStatus("error");
     } finally {
       setBusy(null);
     }
@@ -923,11 +977,15 @@ export function FocusedUserCard({ user }: { user: DetectedUser }) {
     <UserRow
       user={currentUser}
       draft={draft}
-      onDraftChange={setDraft}
+      onDraftChange={(value) => {
+        setDraft(value);
+        setKnowledgeStatus("idle");
+      }}
       onSave={saveDraft}
       onSend={sendDraft}
       onAddToKnowledgeGraph={addToKnowledgeGraph}
       busy={busy}
+      knowledgeStatus={knowledgeStatus}
       highlighted={false}
       showDetailsLink={false}
     />
