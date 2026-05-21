@@ -2,7 +2,7 @@
 
 Churn to Talk is an agent that continuously finds churned users who were interested in your product and helps founders talk to them with personalized recovery emails.
 
-<img src="docs/churn-to-talk-command-center.png" alt="Churn to Talk command center" width="600">
+<img src="docs/churn-to-talk-command-center.png" alt="Churn to Talk command center">
 
 ## Why
 
