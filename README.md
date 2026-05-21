@@ -2,6 +2,8 @@
 
 Churn to Talk is an agent that continuously finds churned users who were interested in your product and helps founders talk to them with personalized recovery emails.
 
+<img src="docs/churn-to-talk-command-center.png" alt="Churn to Talk command center" width="600">
+
 ## Why
 
 > "Half the advice I give to startups is some form of 'talk to your customers.'" — Paul Graham
@@ -21,4 +23,3 @@ Churn to Talk was built as part of the [Nozomio Hackathon](https://luma.com/rshi
 - **InsForge Postgres** stores detected users, run history, drafts, and state.
 - **Hyperspell** stores recurring churn patterns and product issues as memory.
 - **Next.js on Vercel** gives the founder a command center to review, edit, save, and send.
-
