@@ -4,20 +4,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
-  CalendarDays,
   Check,
   ChevronDown,
   Clock3,
   Code2,
   DatabaseZap,
-  ExternalLink,
   FlaskConical,
   Globe2,
   Loader2,
-  MapPin,
   RefreshCw,
   Terminal,
-  Trophy,
   Zap,
 } from "lucide-react";
 import { clsx } from "clsx";
@@ -355,8 +351,6 @@ export function ReviewBoard({ initialUsers, initialRuns }: Props) {
           </div>
         </div>
 
-        <HackathonSection />
-
         <div className="mt-12 grid grid-cols-12 gap-10">
           {/* Run history rail */}
           <aside className="col-span-12 lg:col-span-3">
@@ -412,60 +406,6 @@ export function ReviewBoard({ initialUsers, initialRuns }: Props) {
         </div>
       </main>
     </div>
-  );
-}
-
-function HackathonSection() {
-  const facts = [
-    { icon: CalendarDays, label: "Date", value: "May 9, 2026" },
-    { icon: MapPin, label: "Place", value: "Entrepreneur First Office, San Francisco" },
-    { icon: Trophy, label: "Result", value: "6th place among ~51 teams" },
-  ];
-
-  return (
-    <section className="mt-8 overflow-hidden rounded-xl border border-line bg-white">
-      <div className="grid grid-cols-12 gap-0 lg:divide-x lg:divide-line">
-        <div className="col-span-12 px-5 py-5 sm:px-6 lg:col-span-5">
-          <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-mute">
-            Hackathon project
-          </div>
-          <h2 className="mt-2 text-[22px] font-semibold leading-tight tracking-tight">
-            Built at the Nozomio Hackathon.
-          </h2>
-          <p className="mt-2 max-w-xl text-[13.5px] leading-[1.6] text-mute">
-            Churn to Talk was created as part of the Nozomio Hackathon, a
-            one-day AI agents hackathon in San Francisco. We finished in the
-            top 6 out of roughly 51 teams and 200+ participants.
-          </p>
-          <a
-            href="https://luma.com/rshibq6i?tk=KPGwGN"
-            target="_blank"
-            rel="noreferrer"
-            className="mt-4 inline-flex h-8 items-center gap-2 rounded-md border border-line bg-paper px-3 text-[12px] font-medium text-ink transition-colors hover:bg-paper2"
-          >
-            View Luma event
-            <ExternalLink size={12} />
-          </a>
-        </div>
-
-        <div className="col-span-12 grid grid-cols-1 divide-y divide-line border-t border-line sm:grid-cols-3 sm:divide-x sm:divide-y-0 lg:col-span-7 lg:border-t-0">
-          {facts.map((fact) => {
-            const Icon = fact.icon;
-            return (
-              <div key={fact.label} className="min-w-0 px-5 py-5 sm:px-6">
-                <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-                  <Icon size={13} className="shrink-0 text-moss" />
-                  {fact.label}
-                </div>
-                <div className="mt-2 text-[15px] font-semibold leading-snug text-ink">
-                  {fact.value}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </section>
   );
 }
 
