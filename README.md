@@ -2,13 +2,15 @@
 
 Churn to Talk is an agent that continuously finds churned users who were interested in your product and helps founders talk to them with personalized recovery emails.
 
-<img src="docs/churn-to-talk-command-center.png" alt="Churn to Talk command center" width="600">
-
 ## Why
 
 > "Half the advice I give to startups is some form of 'talk to your customers.'" — Paul Graham
 
 Founders know they should follow up with churned users, but doing it every day means digging through event logs, reconstructing what each person tried, understanding where they got stuck, and writing a non-generic message. Churn to Talk does that work automatically so the founder only has to review and send.
+
+## Hackathon
+
+Churn to Talk was built as part of the [Nozomio Hackathon](https://luma.com/rshibq6i?tk=KPGwGN), held on May 9, 2026 at the Entrepreneur First office in San Francisco. It finished in the top 6 out of roughly 51 teams and 200+ participants.
 
 ## How It Works
 
@@ -20,88 +22,3 @@ Founders know they should follow up with churned users, but doing it every day m
 - **Hyperspell** stores recurring churn patterns and product issues as memory.
 - **Next.js on Vercel** gives the founder a command center to review, edit, save, and send.
 
-## Environment
-
-Copy `.env.example` to `.env` and fill in:
-
-```bash
-OPENAI_API_KEY=
-OPENAI_MODEL=gpt-5.5
-OPENAI_REASONING_EFFORT=low
-NIA_API_KEY=
-FASTCLIP_REPO_URL=https://github.com/quasa0/fastclip.it-copy
-NIA_REPOSITORY=quasa0/fastclip.it-copy
-NIA_CONTEXT_QUERY=fastclip.it-copy context churn recovery
-NIA_LOCAL_FOLDER=fastclip.it-copy
-NIA_LOCAL_FOLDER_ID=
-SKIP_NIA=0
-INSFORGE_DATABASE_URL=
-TENSORLAKE_API_KEY=
-TENSORLAKE_AGENT_URL=https://api.tensorlake.ai/applications/churn_recovery_agent
-TENSORLAKE_APPLICATION_NAME=churn_recovery_agent
-```
-
-## Local Setup
-
-```bash
-npm install
-npm run setup:db
-npm run dev
-```
-
-Open `http://localhost:3000`.
-
-## Tensorlake
-
-Set secrets:
-
-```bash
-tl secrets set OPENAI_API_KEY=$OPENAI_API_KEY \
-  NIA_API_KEY=$NIA_API_KEY \
-  INSFORGE_DATABASE_URL=$INSFORGE_DATABASE_URL
-```
-
-Deploy and trigger:
-
-```bash
-npm run deploy:tensorlake
-npm run trigger:agent
-```
-
-Create the 5-minute cron:
-
-```bash
-npm run deploy:tensorlake:cron
-```
-
-Tensorlake exposes the manual trigger endpoint at:
-
-```text
-https://api.tensorlake.ai/applications/churn_recovery_agent
-```
-
-## Nia
-
-Index or refresh the fastclip repo/source context:
-
-```bash
-npm run index:nia
-```
-
-For this hackathon setup, a permanent Nia shared context exists under the title `fastclip.it-copy context for churn recovery agent`. Set `SKIP_NIA=0` and deploy with `NIA_CONTEXT_QUERY=fastclip.it-copy context churn recovery`.
-
-## Vercel
-
-Set these Vercel environment variables:
-
-```bash
-INSFORGE_DATABASE_URL
-TENSORLAKE_AGENT_URL
-TENSORLAKE_API_KEY
-```
-
-Deploy:
-
-```bash
-npm run deploy:vercel
-```
