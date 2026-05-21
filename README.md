@@ -12,7 +12,7 @@ Founders know they should follow up with churned users, but doing it every day m
 
 ## Hackathon
 
-Churn to Talk was built as part of the [Nozomio Hackathon](https://luma.com/rshibq6i?tk=KPGwGN), held on May 9, 2026 at the Entrepreneur First office in San Francisco. It finished in the top 6 out of roughly 51 teams and 200+ participants.
+Churn to Talk was built as part of the [Nozomio Hackathon](https://luma.com/rshibq6i?tk=KPGwGN), held on May 9, 2026 at the Entrepreneur First office in San Francisco. We finished in the top 6 out of roughly 51 teams and 200+ participants.
 
 ## How It Works
 

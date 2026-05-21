@@ -434,7 +434,7 @@ function HackathonSection() {
           </h2>
           <p className="mt-2 max-w-xl text-[13.5px] leading-[1.6] text-mute">
             Churn to Talk was created as part of the Nozomio Hackathon, a
-            one-day AI agents hackathon in San Francisco. It finished in the
+            one-day AI agents hackathon in San Francisco. We finished in the
             top 6 out of roughly 51 teams and 200+ participants.
           </p>
           <a
